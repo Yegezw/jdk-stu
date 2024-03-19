@@ -6,8 +6,11 @@ import java.lang.reflect.Field;
 
 class Queue {
 
+    // 当一个节点的 waitStatus = SIGNAL, 就说明它的后继节点已经被挂起了(或者马上就要被挂起了)
+    // 因此在当前节点释放锁 OR 放弃获取锁时, 如果它的 waitStatus = SIGNAL, 它还要完成一个额外的操作: 唤醒它的后继节点
+    // SIGNAL 这个状态的设置常常不是节点自己给自己设的, 而是后继节点设置的
     static final class Node {
-        static final Node SHARED    = new Node(); // 共享锁 
+        static final Node SHARED    = new Node(); // 共享锁
         static final Node EXCLUSIVE = null;       // 排它锁
 
         // 新加入节点的 waitStatus = 0
@@ -152,7 +155,7 @@ class Queue {
         return unsafe.compareAndSwapObject(this, headOffset, null, update);
     }
 
-    private boolean compareAndSetTail(Node expect, Node update) {
+    boolean compareAndSetTail(Node expect, Node update) {
         return unsafe.compareAndSwapObject(this, tailOffset, expect, update);
     }
 

@@ -240,7 +240,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 throw new IllegalMonitorStateException();
             }
         } finally {
-            if (failed) node.waitStatus = Node.CANCELLED;
+            if (failed) node.waitStatus = Node.CANCELLED; // 为响应中断式的抢锁而服务
         }
     }
 
@@ -309,40 +309,59 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     // 独占模式模板方法核心实现 =============================================================================================
 
     final boolean acquireQueued(final Node node, int arg) {
-        boolean interrupted = false;
-        for (; ; ) {
-            Node p = node.predecessor();
+        boolean failed = true;
+        try {
+            boolean interrupted = false;
+            for (; ; ) {
+                Node p = node.predecessor();
 
-            // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
-            if (p == queue.head && tryAcquire(arg)) {
-                queue.setHead(node);
-                p.next = null; // help GC
-                return interrupted;
-            }
+                // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
+                if (p == queue.head && tryAcquire(arg)) {
+                    queue.setHead(node);
+                    p.next = null; // help GC
+                    failed = false;
+                    return interrupted;
+                }
 
-            // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: unpark() OR 中断
-            if (shouldParkAfterFailedAcquire(p, node) && parkAndCheckInterrupt()) {
-                interrupted = true; // 发生中断时, 不会抛出 InterruptedException 异常
+                // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: unpark() OR 中断
+                if (shouldParkAfterFailedAcquire(p, node) && parkAndCheckInterrupt()) {
+                    interrupted = true; // 发生中断时, 不会抛出 InterruptedException 异常
+                }
+
+                // 假设线程 A 已经获取到锁, 线程 B 是第一个进入 sync queue 的 Node
+                // 线程 B shouldParkAfterFailedAcquire() 执行完成, 已经将前驱节点的 waitStatus 设置为 SIGNAL
+                // 线程 B 还没来得及执行 parkAndCheckInterrupt() -> LockSupport.park(B), CPU 时间片就耗尽了
+                // 恰好此刻已经获取到锁的线程 A 调用 release() 释放锁, 最终会调用 LockSupport.unpark(B)
+                // 对于处于 Runnable 的线程 B 来说: 线程 A 调用 unpark(B), 自己获得 CPU 时间片后又调用 park(B), 那么 park(B) 将不会阻塞
+                // 建议阅读 LockSupport.unpark(Thread thread) 注释, 并运行 Test1.test3() 测试代码
             }
+        } finally {
+            if (failed) cancelAcquire(node); // 为响应中断式的抢锁而服务
         }
     }
 
     private void doAcquireInterruptibly(int arg) throws InterruptedException {
-        final Node node = queue.addWaiter(Node.EXCLUSIVE); // 尾节点(独占)
-        for (; ; ) {
-            final Node p = node.predecessor();
+        final Node node   = queue.addWaiter(Node.EXCLUSIVE); // 尾节点(独占)
+        boolean    failed = true;
+        try {
+            for (; ; ) {
+                final Node p = node.predecessor();
 
-            // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
-            if (p == queue.head && tryAcquire(arg)) {
-                queue.setHead(node);
-                p.next = null; // help GC
-                return;
-            }
+                // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
+                if (p == queue.head && tryAcquire(arg)) {
+                    queue.setHead(node);
+                    p.next = null; // help GC
+                    failed = false;
+                    return;
+                }
 
-            // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: unpark() OR 中断
-            if (shouldParkAfterFailedAcquire(p, node) && parkAndCheckInterrupt()) {
-                throw new InterruptedException(); // 发生中断时, 抛出 InterruptedException 异常
+                // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: unpark() OR 中断
+                if (shouldParkAfterFailedAcquire(p, node) && parkAndCheckInterrupt()) {
+                    throw new InterruptedException(); // 发生中断时, 抛出 InterruptedException 异常
+                }
             }
+        } finally {
+            if (failed) cancelAcquire(node); // 为响应中断式的抢锁而服务
         }
     }
 
@@ -350,27 +369,33 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         if (nanosTimeout <= 0L) return false;
         final long deadline = System.nanoTime() + nanosTimeout; // 阻塞终止的绝对时间
 
-        final Node node = queue.addWaiter(Node.EXCLUSIVE); // 尾节点(独占)
-        for (; ; ) {
-            final Node p = node.predecessor();
+        final Node node   = queue.addWaiter(Node.EXCLUSIVE); // 尾节点(独占)
+        boolean    failed = true;
+        try {
+            for (; ; ) {
+                final Node p = node.predecessor();
 
-            // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
-            if (p == queue.head && tryAcquire(arg)) {
-                queue.setHead(node);
-                p.next = null; // help GC
-                return true;
+                // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
+                if (p == queue.head && tryAcquire(arg)) {
+                    queue.setHead(node);
+                    p.next = null; // help GC
+                    failed = false;
+                    return true;
+                }
+
+                // nanosTimeout = 被唤醒后, 还需要阻塞的相对时间
+                nanosTimeout = deadline - System.nanoTime();
+                if (nanosTimeout <= 0L) return false; // nanosTimeout 超时返回
+
+                // 调用 parkNanos() 函数来阻塞线程, 线程被唤醒有三种情况: unpark() OR 中断 OR nanosTimeout 超时返回
+                if (shouldParkAfterFailedAcquire(p, node) && nanosTimeout > spinForTimeoutThreshold) {
+                    LockSupport.parkNanos(this, nanosTimeout);
+                }
+
+                if (Thread.interrupted()) throw new InterruptedException(); // 发生中断时, 抛出 InterruptedException 异常
             }
-
-            // nanosTimeout = 被唤醒后, 还需要阻塞的相对时间
-            nanosTimeout = deadline - System.nanoTime();
-            if (nanosTimeout <= 0L) return false; // nanosTimeout 超时返回
-
-            // 调用 parkNanos() 函数来阻塞线程, 线程被唤醒有三种情况: unpark() OR 中断 OR nanosTimeout 超时返回
-            if (shouldParkAfterFailedAcquire(p, node) && nanosTimeout > spinForTimeoutThreshold) {
-                LockSupport.parkNanos(this, nanosTimeout);
-            }
-
-            if (Thread.interrupted()) throw new InterruptedException(); // 发生中断时, 抛出 InterruptedException 异常
+        } finally {
+            if (failed) cancelAcquire(node); // 为响应中断式的抢锁而服务
         }
     }
 
@@ -445,48 +470,60 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     // 共享模式模板方法核心实现 =============================================================================================
 
     private void doAcquireShared(int arg) {
-        final Node node        = queue.addWaiter(Node.SHARED); // 尾节点(共享)
-        boolean    interrupted = false;
-        for (; ; ) {
-            final Node p = node.predecessor();
+        final Node node   = queue.addWaiter(Node.SHARED); // 尾节点(共享)
+        boolean    failed = true;
+        try {
+            boolean interrupted = false;
+            for (; ; ) {
+                final Node p = node.predecessor();
 
-            // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
-            if (p == queue.head) {
-                int r = tryAcquireShared(arg);
-                if (r >= 0) {
-                    setHeadAndPropagate(node, r); // 共享传播
-                    p.next = null; // help GC
-                    if (interrupted) selfInterrupt();
-                    return;
+                // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
+                if (p == queue.head) {
+                    int r = tryAcquireShared(arg);
+                    if (r >= 0) {
+                        setHeadAndPropagate(node, r); // 共享传播
+                        p.next = null; // help GC
+                        if (interrupted) selfInterrupt();
+                        failed = false;
+                        return;
+                    }
+                }
+
+                // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: unpark() OR 中断
+                if (shouldParkAfterFailedAcquire(p, node) && parkAndCheckInterrupt()) {
+                    interrupted = true; // 发生中断时, 不会抛出 InterruptedException 异常
                 }
             }
-
-            // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: unpark() OR 中断
-            if (shouldParkAfterFailedAcquire(p, node) && parkAndCheckInterrupt()) {
-                interrupted = true; // 发生中断时, 不会抛出 InterruptedException 异常
-            }
+        } finally {
+            if (failed) cancelAcquire(node); // 为响应中断式的抢锁而服务
         }
     }
 
     private void doAcquireSharedInterruptibly(int arg) throws InterruptedException {
-        final Node node = queue.addWaiter(Node.SHARED); // 尾节点(共享)
-        for (; ; ) {
-            final Node p = node.predecessor();
+        final Node node   = queue.addWaiter(Node.SHARED); // 尾节点(共享)
+        boolean    failed = true;
+        try {
+            for (; ; ) {
+                final Node p = node.predecessor();
 
-            // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
-            if (p == queue.head) {
-                int r = tryAcquireShared(arg);
-                if (r >= 0) {
-                    setHeadAndPropagate(node, r); // 共享传播
-                    p.next = null; // help GC
-                    return;
+                // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
+                if (p == queue.head) {
+                    int r = tryAcquireShared(arg);
+                    if (r >= 0) {
+                        setHeadAndPropagate(node, r); // 共享传播
+                        p.next = null; // help GC
+                        failed = false;
+                        return;
+                    }
+                }
+
+                // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: unpark() OR 中断
+                if (shouldParkAfterFailedAcquire(p, node) && parkAndCheckInterrupt()) {
+                    throw new InterruptedException(); // 发生中断时, 抛出 InterruptedException 异常
                 }
             }
-
-            // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: unpark() OR 中断
-            if (shouldParkAfterFailedAcquire(p, node) && parkAndCheckInterrupt()) {
-                throw new InterruptedException(); // 发生中断时, 抛出 InterruptedException 异常
-            }
+        } finally {
+            if (failed) cancelAcquire(node); // 为响应中断式的抢锁而服务
         }
     }
 
@@ -494,30 +531,36 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         if (nanosTimeout <= 0L) return false;
         final long deadline = System.nanoTime() + nanosTimeout; // 阻塞终止的绝对时间
 
-        final Node node = queue.addWaiter(Node.SHARED);  // 尾节点(共享)
-        for (; ; ) {
-            final Node p = node.predecessor();
+        final Node node   = queue.addWaiter(Node.SHARED);  // 尾节点(共享)
+        boolean    failed = true;
+        try {
+            for (; ; ) {
+                final Node p = node.predecessor();
 
-            // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
-            if (p == queue.head) {
-                int r = tryAcquireShared(arg);
-                if (r >= 0) {
-                    setHeadAndPropagate(node, r); // 共享传播
-                    p.next = null; // help GC
-                    return true;
+                // 只有前驱节点是头节点的才能尝试获取锁, "成功获得锁的线程" 只有一个
+                if (p == queue.head) {
+                    int r = tryAcquireShared(arg);
+                    if (r >= 0) {
+                        setHeadAndPropagate(node, r); // 共享传播
+                        p.next = null; // help GC
+                        failed = false;
+                        return true;
+                    }
                 }
+
+                // nanosTimeout = 被唤醒后, 还需要阻塞的相对时间
+                nanosTimeout = deadline - System.nanoTime();
+                if (nanosTimeout <= 0L) return false; // nanosTimeout 超时返回
+
+                // 调用 parkNanos() 函数来阻塞线程, 线程被唤醒有三种情况: unpark() OR 中断 OR nanosTimeout 超时返回
+                if (shouldParkAfterFailedAcquire(p, node) && nanosTimeout > spinForTimeoutThreshold) {
+                    LockSupport.parkNanos(this, nanosTimeout);
+                }
+
+                if (Thread.interrupted()) throw new InterruptedException(); // 发生中断时, 抛出 InterruptedException 异常
             }
-
-            // nanosTimeout = 被唤醒后, 还需要阻塞的相对时间
-            nanosTimeout = deadline - System.nanoTime();
-            if (nanosTimeout <= 0L) return false; // nanosTimeout 超时返回
-
-            // 调用 parkNanos() 函数来阻塞线程, 线程被唤醒有三种情况: unpark() OR 中断 OR nanosTimeout 超时返回
-            if (shouldParkAfterFailedAcquire(p, node) && nanosTimeout > spinForTimeoutThreshold) {
-                LockSupport.parkNanos(this, nanosTimeout);
-            }
-
-            if (Thread.interrupted()) throw new InterruptedException(); // 发生中断时, 抛出 InterruptedException 异常
+        } finally {
+            if (failed) cancelAcquire(node); // 为响应中断式的抢锁而服务
         }
     }
 
@@ -581,19 +624,22 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
              * pred 节点被取消了, 跳过 pred, 给 node 链接一个正常的前驱(状态 <= 0)
              * 最终返回 false(再给一次自旋的机会)
              */
+            // 假设 a 节点入队, 往前找的途中, b 节点入队, 也往前找, a b 之间不存在竞争关系
+            // 因为此时 a.waitStatus = 0, b 最多是往前排到 a 的后面
             do {
                 node.prev = pred = pred.prev;
             } while (pred.waitStatus > 0);
             pred.next = node;
         } else {
-            // ws == 0
             /*
              * waitStatus must be 0 or PROPAGATE.  Indicate that we
              * need a signal, but don't park yet.  Caller will need to
              * retry to make sure it cannot acquire before parking.
-             * 此时将 node 前驱节点 waitStatus 设置为 SIGNAL
+             * 此时将 node 前驱节点的 waitStatus 设置为 SIGNAL
              * 最终返回 false(再给一次自旋的机会)
              */
+            // ws == 0
+            // CAS 设置, 因为前驱节点的 waitStatus 有可能变成 CANCELLED
             Queue.compareAndSetWaitStatus(pred, ws, Node.SIGNAL);
         }
         return false;
@@ -626,7 +672,50 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         }
     }
 
-    // 其它函数 ==========================================================================================================
+    private void cancelAcquire(Node node) {
+        // Ignore if node doesn't exist
+        if (node == null) return;
+
+        node.thread = null;
+
+        // Skip cancelled predecessors
+        Node pred = node.prev;
+        while (pred.waitStatus > 0) {
+            node.prev = pred = pred.prev;
+        }
+
+        // predNext is the apparent node to unsplice. CASes below will
+        // fail if not, in which case, we lost race vs another cancel
+        // or signal, so no further action is necessary.
+        Node predNext = pred.next;
+
+        // Can use unconditional write instead of CAS here.
+        // After this atomic step, other Nodes can skip past us.
+        // Before, we are free of interference from other threads.
+        node.waitStatus = Node.CANCELLED;
+
+        // If we are the tail, remove ourselves.
+        if (node == queue.tail && queue.compareAndSetTail(node, pred)) {
+            Queue.compareAndSetNext(pred, predNext, null);
+        } else {
+            // If successor needs signal, try to set pred's next-link
+            // so it will get one. Otherwise wake it up to propagate.
+            int ws;
+            if (pred != queue.head &&
+                    ((ws = pred.waitStatus) == Node.SIGNAL ||
+                            (ws <= 0 && Queue.compareAndSetWaitStatus(pred, ws, Node.SIGNAL))) &&
+                    pred.thread != null) {
+                Node next = node.next;
+                if (next != null && next.waitStatus <= 0) Queue.compareAndSetNext(pred, predNext, next);
+            } else {
+                unparkSuccessor(node);
+            }
+
+            node.next = node; // help GC
+        }
+    }
+
+    // 重要函数三 ========================================================================================================
 
     protected final int getState() {
         return state;
@@ -651,6 +740,19 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         Node s;
         return h != t && ((s = h.next) == null || s.thread != Thread.currentThread());
     }
+
+    // 在 ReentrantReadWriteLock 中 NonfairSync 非公平锁中使用
+    // 如果等待队列中 !head.next.isShared(), 即接下来要被唤醒的是写线程, 返回 true
+    // 那么当前正要获取读锁的线程就要去排队, 这样做是为了避免请求写锁的线程迟迟获取不到写锁
+    protected final boolean apparentlyFirstQueuedIsExclusive() {
+        Node h, s;
+        return (h = queue.head) != null &&
+                (s = h.next) != null &&
+                !s.isShared() &&
+                s.thread != null;
+    }
+
+    // 其它函数 ==========================================================================================================
 
     public final boolean hasQueuedThreads() {
         return queue.head != queue.tail;
@@ -677,6 +779,28 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         for (Node p = queue.tail; p != null; p = p.prev) {
             Thread t = p.thread;
             if (t != null) list.add(t);
+        }
+        return list;
+    }
+
+    public final Collection<Thread> getExclusiveQueuedThreads() {
+        ArrayList<Thread> list = new ArrayList<>();
+        for (Node p = queue.tail; p != null; p = p.prev) {
+            if (!p.isShared()) {
+                Thread t = p.thread;
+                if (t != null) list.add(t);
+            }
+        }
+        return list;
+    }
+
+    public final Collection<Thread> getSharedQueuedThreads() {
+        ArrayList<Thread> list = new ArrayList<Thread>();
+        for (Node p = queue.tail; p != null; p = p.prev) {
+            if (p.isShared()) {
+                Thread t = p.thread;
+                if (t != null) list.add(t);
+            }
         }
         return list;
     }
