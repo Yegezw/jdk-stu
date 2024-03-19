@@ -1,7 +1,12 @@
 package aqs;
 
 import aqs.Queue.Node;
+import sun.misc.Unsafe;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Date;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 
 public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchronizer {
@@ -13,7 +18,257 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
     private final Queue queue = new Queue();
 
+    /**
+     * 锁没有被占用 0、锁已经被占用 1、锁的重入次数大于 1
+     */
+    volatile int state;
+    private static final long stateOffset;
+    private static final Unsafe unsafe;
+
+    static {
+        try {
+            unsafe = Queue.unsafe;
+            stateOffset = unsafe.objectFieldOffset(AbstractQueuedSynchronizer.class.getDeclaredField("state"));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     protected AbstractQueuedSynchronizer() {
+    }
+
+    // Node 单链表: thread、waitStatus、nextWaiter
+    public class ConditionObject implements Condition {
+
+        private transient Node firstWaiter;
+        private transient Node lastWaiter;
+
+        public ConditionObject() {
+        }
+
+        // =============================================================================================================
+
+        @Override
+        public void await() throws InterruptedException {
+
+        }
+
+        @Override
+        public void awaitUninterruptibly() {
+            Node node = addConditionWaiter();
+            int savedState = fullyRelease(node); // 将 state 修改为 0, 表示释放了锁
+
+            boolean interrupted = false;
+            // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: 中断、signal()、signalAll()
+            while (!isOnSyncQueue(node)) {
+                LockSupport.park(this);
+                // 能执行到这里说明
+                // 1、signal() 使 node 位于 sync queue, 且 node.prev.thread 释放锁后调用 unpark(head.next.thread)
+                // 2、线程被中断了, node 还在 condition queue 中
+                if (Thread.interrupted()) interrupted = true;
+            }
+
+            // 调用独占模式 acquireQueued() 方法排队等待锁
+            if (acquireQueued(node, savedState) || interrupted) selfInterrupt();
+        }
+
+        @Override
+        public long awaitNanos(long nanosTimeout) throws InterruptedException {
+            return 0;
+        }
+
+        @Override
+        public boolean await(long time, TimeUnit unit) throws InterruptedException {
+            return false;
+        }
+
+        @Override
+        public boolean awaitUntil(Date deadline) throws InterruptedException {
+            return false;
+        }
+
+        @Override
+        public void signal() {
+            if (!isHeldExclusively()) throw new IllegalMonitorStateException();
+            Node first = firstWaiter;
+            if (first != null) doSignal(first);
+        }
+
+        @Override
+        public void signalAll() {
+            if (!isHeldExclusively()) throw new IllegalMonitorStateException();
+            Node first = firstWaiter;
+            if (first != null) doSignalAll(first);
+        }
+
+        private void doSignal(Node first) {
+            do {
+                // 将 firstWaiter 指向条件队列队头的下一个节点
+                if ((firstWaiter = first.nextWaiter) == null) {
+                    lastWaiter = null;
+                }
+                // 将 first 从条件队列中断开, 则此时 first 成为一个孤立的节点
+                first.nextWaiter = null;
+            } while (!transferForSignal(first) && (first = firstWaiter) != null);
+        }
+
+        private void doSignalAll(Node first) {
+            // 将整个条件队列清空
+            lastWaiter = firstWaiter = null;
+
+            // 将原先的 condition queue 里面的节点一个一个拿出来
+            // 再通过 transferForSignal() 一个一个添加到 sync queue 的末尾
+            do {
+                Node next = first.nextWaiter;
+                first.nextWaiter = null;
+                transferForSignal(first);
+                first = next;
+            } while (first != null);
+        }
+
+        final boolean transferForSignal(Node node) {
+            /*
+             * If cannot change waitStatus, the node has been cancelled.
+             */
+            if (!Queue.compareAndSetWaitStatus(node, Node.CONDITION, 0)) {
+                return false;
+            }
+
+            /*
+             * Splice onto queue and try to set waitStatus of predecessor to
+             * indicate that thread is (probably) waiting. If cancelled or
+             * attempt to set waitStatus fails, wake up to resync (in which
+             * case the waitStatus can be transiently and harmlessly wrong).
+             */
+            Node p = queue.enq(node); // 将 node 放入 sync queue 中, 返回值为 node 的前驱节点
+            int ws = p.waitStatus;
+            // 只要前驱节点处于 "取消状态" 或者 "无法将前驱节点的状态修改成 Node.SIGNAL", 那就将 node 所代表的线程唤醒
+            if (ws > 0 || !Queue.compareAndSetWaitStatus(p, ws, Node.SIGNAL)) {
+                LockSupport.unpark(node.thread);
+            }
+            return true;
+        }
+
+        private Node addConditionWaiter() {
+            Node t = lastWaiter;
+
+            // If lastWaiter is cancelled, clean out.
+            if (t != null && t.waitStatus != Node.CONDITION) {
+                unlinkCancelledWaiters();
+                t = lastWaiter;
+            }
+
+            Node node = new Node(Thread.currentThread(), Node.CONDITION);
+            if (t == null) firstWaiter = node;
+            else t.nextWaiter = node;
+            lastWaiter = node;
+            return node;
+        }
+
+        // 清除 waitStatus != CONDITION 的节点
+        private void unlinkCancelledWaiters() {
+            Node trail = null; // [0 ... t] 的最后一个正常节点
+
+            Node t = firstWaiter;
+            while (t != null) {
+                Node next = t.nextWaiter;
+
+                if (t.waitStatus != Node.CONDITION) {
+                    // 清除 t
+                    t.nextWaiter = null;
+
+                    if (trail == null) firstWaiter = next; // t 前无正常节点
+                    else trail.nextWaiter = next;          // t 前有正常节点
+
+                    if (next == null) lastWaiter = trail;
+                } else {
+                    // 正常节点
+                    trail = t;
+                }
+
+                t = next;
+            }
+        }
+
+        //  support for instrumentation
+
+        final boolean isOwnedBy(AbstractQueuedSynchronizer sync) {
+            return sync == AbstractQueuedSynchronizer.this;
+        }
+
+        protected final boolean hasWaiters() {
+            if (!isHeldExclusively()) throw new IllegalMonitorStateException();
+            for (Node w = firstWaiter; w != null; w = w.nextWaiter) {
+                if (w.waitStatus == Node.CONDITION) return true;
+            }
+            return false;
+        }
+
+        protected final int getWaitQueueLength() {
+            if (!isHeldExclusively()) throw new IllegalMonitorStateException();
+            int n = 0;
+            for (Node w = firstWaiter; w != null; w = w.nextWaiter) {
+                if (w.waitStatus == Node.CONDITION) ++n;
+            }
+            return n;
+        }
+
+        protected final Collection<Thread> getWaitingThreads() {
+            if (!isHeldExclusively()) throw new IllegalMonitorStateException();
+            ArrayList<Thread> list = new ArrayList<>();
+            for (Node w = firstWaiter; w != null; w = w.nextWaiter) {
+                if (w.waitStatus == Node.CONDITION) {
+                    Thread t = w.thread;
+                    if (t != null) list.add(t);
+                }
+            }
+            return list;
+        }
+    }
+
+    // 重要函数一 ========================================================================================================
+
+    final int fullyRelease(Node node) {
+        boolean failed = true;
+        try {
+            int savedState = getState();
+            // 调用独占模式 release() 模板方法
+            if (release(savedState)) {
+                failed = false;
+                return savedState;
+            } else {
+                throw new IllegalMonitorStateException();
+            }
+        } finally {
+            if (failed) node.waitStatus = Node.CANCELLED;
+        }
+    }
+
+    final boolean isOnSyncQueue(Node node) {
+        if (node.waitStatus == Node.CONDITION || node.prev == null) {
+            return false;
+        }
+        if (node.next != null) { // If has successor, it must be on queue
+            return true;
+        }
+        /*
+         * node.prev can be non-null, but not yet on queue because
+         * the CAS to place it on queue can fail. So we have to
+         * traverse from tail to make sure it actually made it.  It
+         * will always be near the tail in calls to this method, and
+         * unless the CAS failed (which is unlikely), it will be
+         * there, so we hardly ever traverse much.
+         */
+        return findNodeFromTail(node);
+    }
+
+    private boolean findNodeFromTail(Node node) {
+        Node t = queue.tail;
+        for (; ; ) {
+            if (t == node) return true;
+            if (t == null) return false;
+            t = t.prev;
+        }
     }
 
     // 独占模式模板方法 + 抽象方法 ==========================================================================================
@@ -161,6 +416,10 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         throw new UnsupportedOperationException();
     }
 
+    protected boolean isHeldExclusively() {
+        throw new UnsupportedOperationException();
+    }
+
     public final void acquireShared(int arg) {
         if (tryAcquireShared(arg) < 0) doAcquireShared(arg);
     }
@@ -294,7 +553,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         }
     }
 
-    // 边缘函数 ==========================================================================================================
+    // 重要函数二 ========================================================================================================
 
     static void selfInterrupt() {
         Thread.currentThread().interrupt(); // 设置中断标志位
@@ -365,5 +624,79 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
             Node s = node.next;
             if (s == null || s.isShared()) doReleaseShared(); // 共享传播(唤醒下一个共享节点)
         }
+    }
+
+    // 其它函数 ==========================================================================================================
+
+    protected final int getState() {
+        return state;
+    }
+
+    protected final void setState(int newState) {
+        state = newState;
+    }
+
+    protected final boolean compareAndSetState(int expect, int update) {
+        return unsafe.compareAndSwapInt(this, stateOffset, expect, update);
+    }
+
+    // 如果在当前线程之前有一个排队线程, 则为 true
+    // 如果当前线程位于队列的头部或队列为空, 则为 false
+    public final boolean hasQueuedPredecessors() {
+        // The correctness of this depends on head being initialized
+        // before tail and on head.next being accurate if the current
+        // thread is first in queue.
+        Node t = queue.tail; // Read fields in reverse initialization order
+        Node h = queue.head;
+        Node s;
+        return h != t && ((s = h.next) == null || s.thread != Thread.currentThread());
+    }
+
+    public final boolean hasQueuedThreads() {
+        return queue.head != queue.tail;
+    }
+
+    public final boolean isQueued(Thread thread) {
+        if (thread == null) throw new NullPointerException();
+        for (Node p = queue.tail; p != null; p = p.prev) {
+            if (p.thread == thread) return true;
+        }
+        return false;
+    }
+
+    public final int getQueueLength() {
+        int n = 0;
+        for (Node p = queue.tail; p != null; p = p.prev) {
+            if (p.thread != null) ++n;
+        }
+        return n;
+    }
+
+    public final Collection<Thread> getQueuedThreads() {
+        ArrayList<Thread> list = new ArrayList<>();
+        for (Node p = queue.tail; p != null; p = p.prev) {
+            Thread t = p.thread;
+            if (t != null) list.add(t);
+        }
+        return list;
+    }
+
+    public final boolean hasWaiters(ConditionObject condition) {
+        if (!owns(condition)) throw new IllegalArgumentException("Not owner");
+        return condition.hasWaiters();
+    }
+
+    public final int getWaitQueueLength(ConditionObject condition) {
+        if (!owns(condition)) throw new IllegalArgumentException("Not owner");
+        return condition.getWaitQueueLength();
+    }
+
+    public final Collection<Thread> getWaitingThreads(ConditionObject condition) {
+        if (!owns(condition)) throw new IllegalArgumentException("Not owner");
+        return condition.getWaitingThreads();
+    }
+
+    public final boolean owns(ConditionObject condition) {
+        return condition.isOwnedBy(this);
     }
 }

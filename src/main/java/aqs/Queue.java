@@ -63,7 +63,7 @@ class Queue {
     volatile Node head;
     volatile Node tail;
 
-    private static final Unsafe unsafe;
+    public static final Unsafe unsafe;
     private static final long headOffset;
     private static final long tailOffset;
     private static final long nextOffset;
@@ -140,7 +140,7 @@ class Queue {
                 node.prev = t;                     // step1 设置 node 节点的上一个节点是 tail
                 if (compareAndSetTail(t, node)) {  // step2 设置 tail = node
                     t.next = node;
-                    return node;
+                    return t;
                 }
             }
         }
