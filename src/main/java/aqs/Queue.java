@@ -7,23 +7,23 @@ import java.lang.reflect.Field;
 class Queue {
 
     static final class Node {
-        static final Node SHARED = new Node(); // 共享锁 
-        static final Node EXCLUSIVE = null;    // 排它锁
+        static final Node SHARED    = new Node(); // 共享锁 
+        static final Node EXCLUSIVE = null;       // 排它锁
 
         // 新加入节点的 waitStatus = 0
         // 正常情况下, 它前面节点的 waitStatus = -1
         static final int CANCELLED = 1;  // indicate thread has cancelled
-        static final int SIGNAL = -1;    // indicate successor's thread needs unparking
+        static final int SIGNAL    = -1; // indicate successor's thread needs unparking
         static final int CONDITION = -2; // indicate thread is waiting on condition
         static final int PROPAGATE = -3; // indicate the next acquireShared should unconditionally propagate
 
         // =======================================================================
 
-        volatile Node prev;
-        volatile Node next;
+        volatile Node   prev;
+        volatile Node   next;
         volatile Thread thread;
-        volatile int waitStatus; // 默认为 0
-        Node nextWaiter;         // SHARED OR EXCLUSIVE(线程等待的是共享锁 OR 排它锁)
+        volatile int    waitStatus; // 默认为 0
+        Node nextWaiter; // SHARED OR EXCLUSIVE(线程等待的是共享锁 OR 排它锁)
 
         // =======================================================================
 
@@ -63,11 +63,11 @@ class Queue {
     volatile Node head;
     volatile Node tail;
 
-    public static final Unsafe unsafe;
-    private static final long headOffset;
-    private static final long tailOffset;
-    private static final long nextOffset;
-    private static final long waitStatusOffset;
+    public static final  Unsafe unsafe;
+    private static final long   headOffset;
+    private static final long   tailOffset;
+    private static final long   nextOffset;
+    private static final long   waitStatusOffset;
 
     static {
         try {

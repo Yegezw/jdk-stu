@@ -31,7 +31,7 @@ public class ReentrantLock implements Lock {
 
         final boolean nonfairTryAcquire(int acquires) {
             final Thread current = Thread.currentThread();
-            int c = getState();
+            int          c       = getState();
 
             // 锁没有被占用
             if (c == 0) {
@@ -123,7 +123,7 @@ public class ReentrantLock implements Lock {
 
         protected final boolean tryAcquire(int acquires) {
             final Thread current = Thread.currentThread();
-            int c = getState();
+            int          c       = getState();
 
             // 锁没有被占用
             if (c == 0) {

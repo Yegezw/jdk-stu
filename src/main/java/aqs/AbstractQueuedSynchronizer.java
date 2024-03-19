@@ -21,8 +21,8 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     /**
      * 锁没有被占用 0、锁已经被占用 1、锁的重入次数大于 1
      */
-    volatile int state;
-    private static final long stateOffset;
+    volatile             int    state;
+    private static final long   stateOffset;
     private static final Unsafe unsafe;
 
     static {
@@ -55,8 +55,8 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
         @Override
         public void awaitUninterruptibly() {
-            Node node = addConditionWaiter();
-            int savedState = fullyRelease(node); // 将 state 修改为 0, 表示释放了锁
+            Node node       = addConditionWaiter();
+            int  savedState = fullyRelease(node); // 将 state 修改为 0, 表示释放了锁
 
             boolean interrupted = false;
             // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: 中断、signal()、signalAll()
@@ -140,8 +140,8 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
              * attempt to set waitStatus fails, wake up to resync (in which
              * case the waitStatus can be transiently and harmlessly wrong).
              */
-            Node p = queue.enq(node); // 将 node 放入 sync queue 中, 返回值为 node 的前驱节点
-            int ws = p.waitStatus;
+            Node p  = queue.enq(node); // 将 node 放入 sync queue 中, 返回值为 node 的前驱节点
+            int  ws = p.waitStatus;
             // 只要前驱节点处于 "取消状态" 或者 "无法将前驱节点的状态修改成 Node.SIGNAL", 那就将 node 所代表的线程唤醒
             if (ws > 0 || !Queue.compareAndSetWaitStatus(p, ws, Node.SIGNAL)) {
                 LockSupport.unpark(node.thread);
@@ -445,8 +445,8 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     // 共享模式模板方法核心实现 =============================================================================================
 
     private void doAcquireShared(int arg) {
-        final Node node = queue.addWaiter(Node.SHARED); // 尾节点(共享)
-        boolean interrupted = false;
+        final Node node        = queue.addWaiter(Node.SHARED); // 尾节点(共享)
+        boolean    interrupted = false;
         for (; ; ) {
             final Node p = node.predecessor();
 
