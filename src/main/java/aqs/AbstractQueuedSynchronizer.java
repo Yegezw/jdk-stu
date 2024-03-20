@@ -308,6 +308,14 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
     // 独占模式模板方法核心实现 =============================================================================================
 
+    // 独占模式下
+    // (1) shouldParkAfterFailedAcquire()
+    // (1) 末尾节点的 waitStatus = 0, 它前面节点的 waitStatus = -1
+    // (2) unparkSuccessor()
+    // (2) 头节点的 waitStatus = -1, 当头节点线程唤醒下一个节点的线程前, 会先设置自己的 waitStatus = 0 然后唤醒下一个节点 
+    // (3) setHead()
+    // (3) 当下一个节点被唤醒后, 它正在执行 acquireQueued(), 它的前驱节点是头节点所以可以尝试获取锁, 获取锁成功后会把自己设置为头节点, 并返回是否被中断过
+
     final boolean acquireQueued(final Node node, int arg) {
         boolean failed = true;
         try {
@@ -433,6 +441,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
     // 共享模式模板方法 + 抽象方法 ==========================================================================================
 
+    // 返回值 < 0 代表: 当前线程获取共享锁失败
+    // 返回值 > 0 代表: 当前线程获取共享锁成功, 且下一个节点为共享节点时, 一定会共享传播
+    // 返回值 = 0 代表: 当前线程获取共享锁成功, 且下一个节点为共享节点时, 需要 h.waitStatus < 0 才会共享传播
     protected int tryAcquireShared(int arg) {
         throw new UnsupportedOperationException();
     }
@@ -468,6 +479,14 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     }
 
     // 共享模式模板方法核心实现 =============================================================================================
+
+    // 共享模式下
+    // (1) shouldParkAfterFailedAcquire()
+    // (1) 末尾节点的 waitStatus = 0, 它前面节点的 waitStatus = -1
+    // (2) doReleaseShared() -> unparkSuccessor()
+    // (2) 头节点的 waitStatus = -1, 当头节点线程唤醒下一个节点的线程前, 会先设置自己的 waitStatus = 0 然后唤醒下一个节点 
+    // (3) setHeadAndPropagate() -> setHead() -> doReleaseShared()
+    // (3) 当下一个节点被唤醒后, 它正在执行 doAcquireShared(), 它的前驱节点是头节点所以可以尝试获取锁, 获取锁成功后会把自己设置为头节点, 并可能唤醒下一个节点
 
     private void doAcquireShared(int arg) {
         final Node node   = queue.addWaiter(Node.SHARED); // 尾节点(共享)
@@ -564,6 +583,11 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         }
     }
 
+    // 该方法有两处调用
+    // 1、setHeadAndPropagate(Node node, int propagate) 当线程成功获取到共享锁, 设置自己为头节点后调用(调用此方法的 node 一定是头节点)
+    // 2、releaseShared() 当线程成功释放共享锁的时候调用(调用此方法的 node 之前肯定是头节点, 但现在头节点可能不是它了)
+    // 该方法会被同一个节点调用两次: 线程 A 获取到共享锁, 设置自己为头节点后调用; 线程 A 释放共享锁时调用
+    // 当线程 A 第二次调用时, 当前的头节点很可能已经易主了(也就是说, 当前 sync queue 的头节点已经不是线程 A 所在的节点了)
     private void doReleaseShared() {
         /*
          * Ensure that a release propagates, even if there are other
@@ -578,18 +602,53 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
          */
         for (; ; ) {
             // 头节点既是虚拟头节点, 又是成功获取到锁的节点
+            // 假设 A 已经拿到了共享锁 head(A) -> B -> C, doReleaseShared[A] 过程中 h = A, 唤醒后继节点 B
+            // 节点 B 被唤醒后也获得了共享锁 head(B) -> C, doReleaseShared[B] 过程中 h = B, 唤醒后继节点 C
+            // 此时 doReleaseShared[A] 过程中 h = B, 也就是说多个线程拿到的 h 可能是一样的, 即 A B 两个线程同时唤醒一个节点 C
             Node h = queue.head;
+
+            // 能进入这个 if 说明队列至少有两个节点
             if (h != null && h != queue.tail) {
                 int ws = h.waitStatus;
+
+                // ws = -1
                 if (ws == Node.SIGNAL) {
+                    // CAS(h.waitStatus, SIGNAL, 0)
                     if (!Queue.compareAndSetWaitStatus(h, Node.SIGNAL, 0)) {
                         continue;            // loop to recheck cases
                     }
                     unparkSuccessor(h);
-                } else if (ws == 0 && !Queue.compareAndSetWaitStatus(h, 0, Node.PROPAGATE)) {
+                }
+
+                // ws = 0
+                // 假如 sync queue 为 head(-1) -> node1(t1 & -1) -> node2(t2 & 0)
+                // head 所在的线程释放信号量, 进而唤醒线程 t1
+                // 线程 t1 被唤醒后尝试获取信号量得到 0, 还没来得及 setHeadAndPropagate(node, 0)
+                // 此时 sync queue 为 head(0) -> node1(t1 & -1) -> node2(t2 & 0)
+                // 如果此时有线程释放信号量而调用 doReleaseShared(), ws 就会读到 0
+                // 这里必须要 CAS 设置 h.waitStatus = PROPAGATE(-3)
+                else if (ws == 0 && !Queue.compareAndSetWaitStatus(h, 0, Node.PROPAGATE)) {
                     continue;                // loop on failed CAS
                 }
             }
+
+            // 只有在当前 head 没有易主时才会退出, 否则继续循环
+
+            // 约定: X 调用 doReleaseShared() 写做 doReleaseShared[X]
+            // 假设 A 已经拿到了共享锁 head(A) -> B -> C -> D, doReleaseShared[A] 唤醒后继节点 B
+            // 节点 B 被唤醒后也获得了共享锁 head(B) -> C -> D, doReleaseShared[B] 唤醒后继节点 C
+            // 但是别忘了: 在 doReleaseShared[B] 的时候 doReleaseShared[A] 还没运行结束呢
+            // 当 doReleaseShared[A] 运行到 if(h == head) 时, 发现头节点现在已经变了, 它将继续回到 for 循环中
+            // 与此同时, doReleaseShared[B] 也没闲着, 它在执行过程中也进入到了 for 循环中 ...
+
+            // 由此可见, 我们这里形成了一个 doReleaseShared[X] 的调用风暴
+            // 大量的线程在同时执行 doReleaseShared(), 这极大地加速了唤醒后继节点的速度, 提升了效率
+            // 同时该方法内部的 CAS 操作又保证了多个线程同时唤醒一个节点时, 只有一个线程能操作成功
+
+            // 那如果这里 doReleaseShared[A] 唤醒节点 B, 但节点 B 还没来得及将自己设置为头节点时, doReleaseShared[A] 方法不就退出了吗
+            // 是的, 但即使这样也没有关系, 因为它已经成功唤醒了线程 B
+            // 即使 doReleaseShared[A] 退出了, 当 B 线程成为新的头节点时, doReleaseShared[B] 就开始执行了, 它也会负责唤醒后继节点的
+            // 即使变成这种每个节点只唤醒自己后继节点的模式, 从功能上讲, 最终也可以实现 "唤醒所有等待共享锁的节点" 的目的, 只是效率上没有之前的调用风暴快
             if (h == queue.head) {           // loop if head changed
                 break;
             }
@@ -638,16 +697,91 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
              * 此时将 node 前驱节点的 waitStatus 设置为 SIGNAL
              * 最终返回 false(再给一次自旋的机会)
              */
-            // ws == 0
+            // ws == 0 || ws == PROPAGATE
             // CAS 设置, 因为前驱节点的 waitStatus 有可能变成 CANCELLED
             Queue.compareAndSetWaitStatus(pred, ws, Node.SIGNAL);
         }
         return false;
     }
 
+    /**
+     * <a href="https://www.cnblogs.com/micrari/p/6937995.html">PROPAGATE 状态存在的意义</a>
+     * <pre> {@code
+     * public class TestSemaphore {
+     *
+     *    private static Semaphore sem = new Semaphore(0);
+     *
+     *    private static class Thread1 extends Thread {
+     *        @Override
+     *        public void run() {
+     *            sem.acquireUninterruptibly(); // 获取信号量
+     *        }
+     *    }
+     *
+     *    private static class Thread2 extends Thread {
+     *        @Override
+     *        public void run() {
+     *            sem.release();                // 释放信号量
+     *        }
+     *    }
+     *
+     *    public static void main(String[] args) throws InterruptedException {
+     *        for (int i = 0; i < 10000000; i++) {
+     *            Thread t1 = new Thread1();    // 获取信号量
+     *            Thread t2 = new Thread1();    // 获取信号量
+     *            Thread t3 = new Thread2();    // 释放信号量
+     *            Thread t4 = new Thread2();    // 释放信号量
+     *            t1.start();
+     *            t2.start();
+     *            t3.start();
+     *            t4.start();
+     *            t1.join();
+     *            t2.join();
+     *            t3.join();
+     *            t4.join();
+     *            System.out.println(i);
+     *        }
+     *    }
+     * }
+     * }</pre>
+     *
+     * <p>
+     * 共享模式下, 一个被 park() 的线程, 不考虑中断和前驱节点取消的情况, 有两种情况可以被 unpark()<br>
+     * 第一种: 其它线程释放信号量, 调用 unparkSuccessor();<br>
+     * 第二种: 其它线程获取共享锁时, 通过共享传播来唤醒后继节点<br>
+     * </p>
+     *
+     * <p>
+     * 假设某次 sync queue 为 head(-1) -> node1(t1 & -1) -> node2(t2 & 0)<br>
+     * 信号量释放的顺序为 t3 先释放, t4 后释放<br>
+     * 时刻一: t3 调用 {@link #releaseShared(int)} -> {@link #doReleaseShared()} -> {@link #unparkSuccessor(Node)},
+     * 唤醒下一个节点 node1(t1 & -1) 前, 会先将当前头节点的 waitStatus 置 0, 即 head(-1 -> 0)<br>
+     * 时刻二: t1 由于 t3 释放信号量而被唤醒, t1 在 {@link #doAcquireShared(int)} 中调用 Semaphore.NonfairSync 的 tryAcquireShared() 返回值为 0,
+     * 此时 sync queue 为 head(0) -> node1(t1 & -1) -> node2(t2 & 0)<br>
+     * 时刻三: t4 调用 {@link #releaseShared(int)} -> {@link #doReleaseShared()},
+     * 此时 h.waitStatus = 0 不满足条件, 因此不会调用 {@link #unparkSuccessor(Node)}, 但必须 CAS 设置 h.waitStatus = PROPAGATE(-3)<br>
+     * 时刻四: t1 在 {@link #doAcquireShared(int)} 获取信号量成功, 调用 setHeadAndPropagate() 时, 因为时刻三的设置,
+     * 会读到 h.waitStatus < 0, 从而可以接下来调用 {@link #doReleaseShared()} 唤醒 t2<br>
+     * </p>
+     *
+     * <p>
+     * 假如时刻三读到 h.waitStatus = 0, 不能唤醒下一个节点<br>
+     * 且不进行 CAS 设置 h.waitStatus = PROPAGATE(-3)<br>
+     * 那么在时刻四 t1 在 {@link #doAcquireShared(int)} 获取信号量 0 成功, 调用 setHeadAndPropagate() 时<br>
+     * 会因为 propagate = 0 而不能共享传播, 导致线程 t2 无法被唤醒
+     * </p>
+     */
     private void setHeadAndPropagate(Node node, int propagate) {
         // node 为虚拟头节点的下一个节点, 传播 propagate >= 0
         // 初始时 h 为当前队列的头节点, 即 node 的前驱节点
+        // 因为 node 由 h 唤醒, 所以 h.waitStatus = 0, h(0) -> node(-1)
+
+        // 假设当前节点为 node1, 此时 sync queue 为 head(-3 | 0) -> node1(t1 & -1) -> node2(t2 & 0)
+        // 如果 propagate > 0 就会共享传播
+        // 如果 propagate = 0, head.waitStatus = -3 代表 node1 被唤醒但还没来得及 setHeadAndPropagate() 期间
+        // 有别的线程调用 doReleaseShared(), 而由于此时 h.waitStatus = 0 所以不能唤醒任何节点
+        // 因此通过将 h.waitStatus = -3 来告诉 node1, 在 node1.setHeadAndPropagate() 时, 需要共享传播
+        // 完成 "别的调用了 doReleaseShared() 的线程" 因为 "node1 没有及时设置自己为头" 而导致 "不能唤醒任何节点" 的任务
         Node h = queue.head; // Record old head for check below
         queue.setHead(node);
         /*
@@ -666,6 +800,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
          * racing acquires/releases, so most need signals now or soon
          * anyway.
          */
+        // 注意: 这里不能只根据 propagate= tryAcquireShared() 的返回值来判断是否应该共享传播
+        // 注意: propagate > 0 且下一个节点为共享节点时, 一定会共享传播
+        // 注意: propagate = 0 且下一个节点为共享节点时, 需要 h.waitStatus < 0 才会共享传播
         if (propagate > 0 || h == null || h.waitStatus < 0 || (h = queue.head) == null || h.waitStatus < 0) {
             Node s = node.next;
             if (s == null || s.isShared()) doReleaseShared(); // 共享传播(唤醒下一个共享节点)
