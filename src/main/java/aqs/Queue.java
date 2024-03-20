@@ -4,7 +4,22 @@ import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
 
+/**
+ * <p>用于实现 AQS 的 sync queue 和 condition queue<br>
+ * <p>注意: 在多线程情况下, 可以把 AQS 想象为一个共享变量, 通过这个变量可以得到 queue 和 node
+ */
 class Queue {
+
+    // 独占模式下的 sync queue
+    // 所有 node 都满足 nextWaiter = EXCLUSIVE
+
+    // 共享模式下的 sync queue
+    // 写节点的 nextWaiter = EXCLUSIVE
+    // 读节点的 nextWaiter = SHARED
+    // 写锁是排它锁、读锁是共享锁、读锁和写锁之间也是排它的、已获取写锁的线程可以获取读锁(支持锁降级)
+    // 当写锁被获取: 其它线程获取写锁 OR 读锁, 都会被阻塞, sync queue 同时存在其它线程的写节点和读节点
+    // 当读锁被获取: 所有请求读锁的线程大概率会成功, 但公平锁请求读锁可能失败; 获取写锁的所有线程会失败, sync queue 存在所有线程的写节点和其它线程的读节点
+    // 总结: sync queue 会存在读节点和写节点, 一般情况下读节点个数 > 写节点个数
 
     // 当一个节点的 waitStatus = SIGNAL, 就说明它的后继节点已经被挂起了(或者马上就要被挂起了)
     // 因此在当前节点释放锁 OR 放弃获取锁时, 如果它的 waitStatus = SIGNAL, 它还要完成一个额外的操作: 唤醒它的后继节点
