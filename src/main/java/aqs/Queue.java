@@ -73,6 +73,19 @@ class Queue {
             if (p == null) throw new NullPointerException();
             else return p;
         }
+
+        /**
+         * 用于调试打印, 不保证线程安全
+         */
+        @Override
+        public String toString() {
+            return String.format(
+                    "Node{thread = %s, waitStatus = %d, nextWaiter = %s}",
+                    thread != null ? thread.getName() : null,
+                    waitStatus,
+                    nextWaiter == SHARED ? "SHARED" : "EXCLUSIVE"
+            );
+        }
     }
 
     /**

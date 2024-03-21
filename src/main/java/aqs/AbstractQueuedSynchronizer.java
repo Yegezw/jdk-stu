@@ -9,6 +9,11 @@ import java.util.Date;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 
+/**
+ * <p>阻塞: 新节点入队, 将前驱节点 waitStatus = -1, 如果前驱是 head 再给一次抢锁的机会, 最后调用 unpark() 阻塞
+ * <p>释放: 设置 head.waitStatus = 0, unpark() 唤醒后继节点的线程
+ * <p>醒来: 线程被 unpark() 唤醒后, 尝试获取锁, 获取成功后将自己设置为头节点
+ */
 public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchronizer {
 
     // 1000 ns = 1 ms
@@ -227,6 +232,26 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     }
 
     // 重要函数一 ========================================================================================================
+
+    /**
+     * 用于调试打印, 不保证线程安全
+     */
+    public void printInfo() {
+        int    r      = state >>> 16;
+        int    w      = state & ((1 << 16) - 1);
+        Thread thread = getExclusiveOwnerThread();
+
+        System.err.println("state = " + state);
+        System.err.println("读锁数: " + r);
+        System.err.println("写锁数: " + w);
+        System.err.println("exclusiveOwnerThread = " + (thread != null ? thread.getName() : null));
+
+        Node cur = queue.head;
+        while (cur != null) {
+            System.err.println(cur);
+            cur = cur.next;
+        }
+    }
 
     final int fullyRelease(Node node) {
         boolean failed = true;
@@ -775,7 +800,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
      * 那么在时刻四 t1 在 {@link #doAcquireShared(int)} 获取信号量 0 成功, 调用 setHeadAndPropagate() 时<br>
      * 会因为 propagate = 0 而不能共享传播, 导致线程 t2 无法被唤醒
      * </p>
-     * 
+     *
      * @see #doAcquireShared(int)
      * @see #doReleaseShared()
      */
@@ -876,6 +901,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
     // 如果在当前线程之前有一个排队线程, 则为 true
     // 如果当前线程位于队列的头部或队列为空, 则为 false
+    /**
+     * 有排队的前置任务
+     */
     public final boolean hasQueuedPredecessors() {
         // The correctness of this depends on head being initialized
         // before tail and on head.next being accurate if the current
@@ -889,6 +917,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     // 在 ReentrantReadWriteLock 中 NonfairSync 非公平锁中使用
     // 如果等待队列中 !head.next.isShared(), 即接下来要被唤醒的是写线程, 返回 true
     // 那么当前正要获取读锁的线程就要去排队, 这样做是为了避免请求写锁的线程迟迟获取不到写锁
+    /**
+     * 显然第一个排队是独占的
+     */
     protected final boolean apparentlyFirstQueuedIsExclusive() {
         Node h, s;
         return (h = queue.head) != null &&

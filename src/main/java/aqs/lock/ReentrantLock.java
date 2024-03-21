@@ -41,7 +41,7 @@ public class ReentrantLock implements Lock {
                     return true;
                 }
             }
-            // 锁被其当前线程占用
+            // 锁被当前线程占用
             else if (current == getExclusiveOwnerThread()) {
                 int nextc = c + acquires;
                 if (nextc < 0) throw new Error("Maximum lock count exceeded"); // overflow
@@ -133,7 +133,7 @@ public class ReentrantLock implements Lock {
                     return true;
                 }
             }
-            // 锁被其当前线程占用
+            // 锁被当前线程占用
             else if (current == getExclusiveOwnerThread()) {
                 int nextc = c + acquires;
                 if (nextc < 0) throw new Error("Maximum lock count exceeded"); // overflow
