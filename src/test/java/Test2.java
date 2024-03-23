@@ -1,5 +1,8 @@
 import aqs.lock.ReentrantReadWriteLock;
 
+/**
+ * 观察 ReentrantReadWriteLock 锁降级过程
+ */
 @SuppressWarnings("all")
 public class Test2 {
 

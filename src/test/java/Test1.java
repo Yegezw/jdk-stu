@@ -1,10 +1,13 @@
 import aqs.lock.Lock;
 import aqs.lock.ReentrantLock;
-import sun.misc.Unsafe;
 
-import java.lang.reflect.Field;
 import java.util.concurrent.locks.LockSupport;
 
+/**
+ * <p>test1() 测试 Out.onws(In in) 函数
+ * <p>test2() 测试 ReentrantLock
+ * <p>test3() 测试先 unpark(thread), 观察 thread.park() 会不会阻塞
+ */
 public class Test1 {
 
     // 测试 Out.onws(In in) 函数
@@ -27,7 +30,7 @@ public class Test1 {
 
     // 测试 ReentrantLock
     private static void test2() throws InterruptedException {
-        Lock lock = new ReentrantLock();
+        final Lock lock = new ReentrantLock();
 
         Runnable r = () -> {
             for (int i = 0; i < 1000000; i++) {
@@ -48,18 +51,6 @@ public class Test1 {
     }
 
     // ===========================================================
-
-    private static final Unsafe unsafe;
-
-    static {
-        try {
-            Field field = Unsafe.class.getDeclaredField("theUnsafe");
-            field.setAccessible(true);
-            unsafe = (Unsafe) field.get(null);
-        } catch (Exception e) {
-            throw new RuntimeException();
-        }
-    }
 
     /**
      * <p>
