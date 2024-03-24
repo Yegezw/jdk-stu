@@ -10,6 +10,7 @@ import java.util.LinkedList;
  * <p>支持阻塞读和阻塞写的有限队列
  * <p>入队: 队列已满时, 写入操作会被阻塞, 直到队列有空位为止
  * <p>出队: 队列为空时, 读取操作会被阻塞, 直到队列有数据为止
+ * <p>基于条件变量实现, await() 和 signal() 之前必须先加锁, while(...) await() 避免假唤醒
  */
 @SuppressWarnings("all")
 public class BlockingQueueCond<E> {
@@ -63,6 +64,9 @@ public class BlockingQueueCond<E> {
         }
     }
 
+    /**
+     * 返回的 size 不一定准确(线程不安全)
+     */
     public int getSize() {
         return list.size();
     }
