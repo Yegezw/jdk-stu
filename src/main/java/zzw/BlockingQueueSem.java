@@ -78,11 +78,14 @@ public class BlockingQueueSem<E> {
         }
     }
 
-    /**
-     * 返回的 size 不一定准确(线程不安全)
-     */
     public int getSize() {
-        return list.size();
+        lock.lock();
+        try {
+            int size = list.size();
+            return size;
+        } finally {
+            lock.unlock();
+        }
     }
 
     public int getCapacity() {
