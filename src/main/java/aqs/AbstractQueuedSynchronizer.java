@@ -48,88 +48,13 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         private transient Node firstWaiter;
         private transient Node lastWaiter;
 
+        private static final int REINTERRUPT = 1;
+        private static final int THROW_IE    = -1;
+
         public ConditionObject() {
         }
 
-        // =============================================================================================================
-
-        @Override
-        public void await() throws InterruptedException {
-
-        }
-
-        @Override
-        public void awaitUninterruptibly() {
-            Node node       = addConditionWaiter();
-            int  savedState = fullyRelease(node); // 将 state 修改为 0, 表示释放了锁
-
-            boolean interrupted = false;
-            // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: 中断、signal()、signalAll()
-            while (!isOnSyncQueue(node)) {
-                LockSupport.park(this);
-                // 能执行到这里说明
-                // 1、signal() 使 node 位于 sync queue, 且 node.prev.thread 释放锁后调用 unpark(head.next.thread)
-                // 2、线程被中断了, node 还在 condition queue 中
-                if (Thread.interrupted()) interrupted = true;
-            }
-
-            // 调用独占模式 acquireQueued() 方法排队等待锁
-            if (acquireQueued(node, savedState) || interrupted) selfInterrupt();
-        }
-
-        @Override
-        public long awaitNanos(long nanosTimeout) throws InterruptedException {
-            return 0;
-        }
-
-        @Override
-        public boolean await(long time, TimeUnit unit) throws InterruptedException {
-            return false;
-        }
-
-        @Override
-        public boolean awaitUntil(Date deadline) throws InterruptedException {
-            return false;
-        }
-
-        @Override
-        public void signal() {
-            if (!isHeldExclusively()) throw new IllegalMonitorStateException();
-            Node first = firstWaiter;
-            if (first != null) doSignal(first);
-        }
-
-        @Override
-        public void signalAll() {
-            if (!isHeldExclusively()) throw new IllegalMonitorStateException();
-            Node first = firstWaiter;
-            if (first != null) doSignalAll(first);
-        }
-
-        private void doSignal(Node first) {
-            do {
-                // 将 firstWaiter 指向条件队列队头的下一个节点
-                if ((firstWaiter = first.nextWaiter) == null) {
-                    lastWaiter = null;
-                }
-                // 将 first 从条件队列中断开, 则此时 first 成为一个孤立的节点
-                first.nextWaiter = null;
-            } while (!transferForSignal(first) && (first = firstWaiter) != null);
-        }
-
-        private void doSignalAll(Node first) {
-            // 将整个条件队列清空
-            lastWaiter = firstWaiter = null;
-
-            // 将原先的 condition queue 里面的节点一个一个拿出来
-            // 再通过 transferForSignal() 一个一个添加到 sync queue 的末尾
-            do {
-                Node next = first.nextWaiter;
-                first.nextWaiter = null;
-                transferForSignal(first);
-                first = next;
-            } while (first != null);
-        }
+        // ------------------------------------------------
 
         final boolean transferForSignal(Node node) {
             /*
@@ -195,7 +120,206 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
             }
         }
 
-        //  support for instrumentation
+        // ------------------------------------------------
+
+        @Override
+        public void await() throws InterruptedException {
+            if (Thread.interrupted())
+                throw new InterruptedException();
+            Node node          = addConditionWaiter();
+            int  savedState    = fullyRelease(node);
+            int  interruptMode = 0;
+            while (!isOnSyncQueue(node)) {
+                LockSupport.park(this);
+                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
+                    break;
+            }
+            if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
+                interruptMode = REINTERRUPT;
+            if (node.nextWaiter != null) // clean up if cancelled
+                unlinkCancelledWaiters();
+            if (interruptMode != 0)
+                reportInterruptAfterWait(interruptMode);
+        }
+
+        @Override
+        public void awaitUninterruptibly() {
+            Node node       = addConditionWaiter();
+            int  savedState = fullyRelease(node); // 将 state 修改为 0, 表示释放了锁
+
+            boolean interrupted = false;
+            // 调用 park() 函数来阻塞线程, 线程被唤醒有两种情况: 中断、signal()、signalAll()
+            while (!isOnSyncQueue(node)) {
+                LockSupport.park(this);
+                // 能执行到这里说明
+                // 1、signal() 使 node 位于 sync queue, 且 node.prev.thread 释放锁后调用 unpark(head.next.thread)
+                // 2、线程被中断了, node 还在 condition queue 中
+                if (Thread.interrupted()) interrupted = true;
+            }
+
+            // 调用独占模式 acquireQueued() 方法排队等待锁
+            if (acquireQueued(node, savedState) || interrupted) selfInterrupt();
+        }
+
+        @Override
+        public long awaitNanos(long nanosTimeout) throws InterruptedException {
+            if (Thread.interrupted())
+                throw new InterruptedException();
+            Node       node          = addConditionWaiter();
+            int        savedState    = fullyRelease(node);
+            final long deadline      = System.nanoTime() + nanosTimeout;
+            int        interruptMode = 0;
+            while (!isOnSyncQueue(node)) {
+                if (nanosTimeout <= 0L) {
+                    transferAfterCancelledWait(node);
+                    break;
+                }
+                if (nanosTimeout >= spinForTimeoutThreshold)
+                    LockSupport.parkNanos(this, nanosTimeout);
+                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
+                    break;
+                nanosTimeout = deadline - System.nanoTime();
+            }
+            if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
+                interruptMode = REINTERRUPT;
+            if (node.nextWaiter != null)
+                unlinkCancelledWaiters();
+            if (interruptMode != 0)
+                reportInterruptAfterWait(interruptMode);
+            return deadline - System.nanoTime();
+        }
+
+        @Override
+        public boolean await(long time, TimeUnit unit) throws InterruptedException {
+            long nanosTimeout = unit.toNanos(time);
+            if (Thread.interrupted())
+                throw new InterruptedException();
+            Node       node          = addConditionWaiter();
+            int        savedState    = fullyRelease(node);
+            final long deadline      = System.nanoTime() + nanosTimeout;
+            boolean    timedout      = false;
+            int        interruptMode = 0;
+            while (!isOnSyncQueue(node)) {
+                if (nanosTimeout <= 0L) {
+                    timedout = transferAfterCancelledWait(node);
+                    break;
+                }
+                if (nanosTimeout >= spinForTimeoutThreshold)
+                    LockSupport.parkNanos(this, nanosTimeout);
+                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
+                    break;
+                nanosTimeout = deadline - System.nanoTime();
+            }
+            if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
+                interruptMode = REINTERRUPT;
+            if (node.nextWaiter != null)
+                unlinkCancelledWaiters();
+            if (interruptMode != 0)
+                reportInterruptAfterWait(interruptMode);
+            return !timedout;
+        }
+
+        @Override
+        public boolean awaitUntil(Date deadline) throws InterruptedException {
+            long abstime = deadline.getTime();
+            if (Thread.interrupted())
+                throw new InterruptedException();
+            Node    node          = addConditionWaiter();
+            int     savedState    = fullyRelease(node);
+            boolean timedout      = false;
+            int     interruptMode = 0;
+            while (!isOnSyncQueue(node)) {
+                if (System.currentTimeMillis() > abstime) {
+                    timedout = transferAfterCancelledWait(node);
+                    break;
+                }
+                LockSupport.parkUntil(this, abstime);
+                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
+                    break;
+            }
+            if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
+                interruptMode = REINTERRUPT;
+            if (node.nextWaiter != null)
+                unlinkCancelledWaiters();
+            if (interruptMode != 0)
+                reportInterruptAfterWait(interruptMode);
+            return !timedout;
+        }
+
+        // ------------------------------------------------
+
+        private int checkInterruptWhileWaiting(Node node) {
+            return Thread.interrupted() ?
+                    (transferAfterCancelledWait(node) ? THROW_IE : REINTERRUPT) :
+                    0;
+        }
+
+        final boolean transferAfterCancelledWait(Node node) {
+            if (queue.compareAndSetWaitStatus(node, Node.CONDITION, 0)) {
+                queue.enq(node);
+                return true;
+            }
+            /*
+             * If we lost out to a signal(), then we can't proceed
+             * until it finishes its enq().  Cancelling during an
+             * incomplete transfer is both rare and transient, so just
+             * spin.
+             */
+            while (!isOnSyncQueue(node))
+                Thread.yield();
+            return false;
+        }
+
+        private void reportInterruptAfterWait(int interruptMode)
+                throws InterruptedException {
+            if (interruptMode == THROW_IE)
+                throw new InterruptedException();
+            else if (interruptMode == REINTERRUPT)
+                selfInterrupt();
+        }
+
+        // ------------------------------------------------
+
+        @Override
+        public void signal() {
+            if (!isHeldExclusively()) throw new IllegalMonitorStateException();
+            Node first = firstWaiter;
+            if (first != null) doSignal(first);
+        }
+
+        @Override
+        public void signalAll() {
+            if (!isHeldExclusively()) throw new IllegalMonitorStateException();
+            Node first = firstWaiter;
+            if (first != null) doSignalAll(first);
+        }
+
+        private void doSignal(Node first) {
+            do {
+                // 将 firstWaiter 指向条件队列队头的下一个节点
+                if ((firstWaiter = first.nextWaiter) == null) {
+                    lastWaiter = null;
+                }
+                // 将 first 从条件队列中断开, 则此时 first 成为一个孤立的节点
+                first.nextWaiter = null;
+            } while (!transferForSignal(first) && (first = firstWaiter) != null);
+        }
+
+        private void doSignalAll(Node first) {
+            // 将整个条件队列清空
+            lastWaiter = firstWaiter = null;
+
+            // 将原先的 condition queue 里面的节点一个一个拿出来
+            // 再通过 transferForSignal() 一个一个添加到 sync queue 的末尾
+            do {
+                Node next = first.nextWaiter;
+                first.nextWaiter = null;
+                transferForSignal(first);
+                first = next;
+            } while (first != null);
+        }
+
+        //  support for instrumentation ------------------------------------------------
 
         final boolean isOwnedBy(AbstractQueuedSynchronizer sync) {
             return sync == AbstractQueuedSynchronizer.this;
@@ -229,6 +353,27 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
             }
             return list;
         }
+
+        /**
+         * 用于调试打印, 不保证线程安全
+         */
+        @Override
+        public void printInfo() {
+            int    r      = state >>> 16;
+            int    w      = state & ((1 << 16) - 1);
+            Thread thread = getExclusiveOwnerThread();
+
+            System.err.println("state = " + state);
+            System.err.println("读锁数: " + r);
+            System.err.println("写锁数: " + w);
+            System.err.println("exclusiveOwnerThread = " + (thread != null ? thread.getName() : null));
+
+            Node cur = firstWaiter;
+            while (cur != null) {
+                System.err.println(cur.toString(false));
+                cur = cur.nextWaiter;
+            }
+        }
     }
 
     // 重要函数一 ========================================================================================================
@@ -248,7 +393,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
         Node cur = queue.head;
         while (cur != null) {
-            System.err.println(cur);
+            System.err.println(cur.toString(true));
             cur = cur.next;
         }
     }

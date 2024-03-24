@@ -77,14 +77,23 @@ class Queue {
         /**
          * 用于调试打印, 不保证线程安全
          */
-        @Override
-        public String toString() {
-            return String.format(
-                    "Node{thread = %s, waitStatus = %d, nextWaiter = %s}",
-                    thread != null ? thread.getName() : null,
-                    waitStatus,
-                    nextWaiter == SHARED ? "SHARED" : "EXCLUSIVE"
-            );
+        public String toString(boolean syn) {
+            if (syn) {
+                // node in syn queue
+                return String.format(
+                        "Node{thread = %s, waitStatus = %d, nextWaiter = %s}",
+                        thread != null ? thread.getName() : null,
+                        waitStatus,
+                        nextWaiter == SHARED ? "SHARED" : "EXCLUSIVE"
+                );
+            } else {
+                // node in condition queue
+                return String.format(
+                        "Node{thread = %s, waitStatus = %d}",
+                        thread != null ? thread.getName() : null,
+                        waitStatus
+                );
+            }
         }
     }
 

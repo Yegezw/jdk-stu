@@ -18,4 +18,9 @@ public interface Condition {
     void signal();
 
     void signalAll();
+
+    /**
+     * 用于调试打印, 不保证线程安全
+     */
+    void printInfo();
 }
