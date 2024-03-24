@@ -370,7 +370,6 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
         }
     }
 
-
     static final class NonfairSync extends Sync {
 
         @Override
