@@ -1,3 +1,5 @@
+package aqs;
+
 import aqs.synchronization_tool.Semaphore;
 
 /**

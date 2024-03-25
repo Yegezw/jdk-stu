@@ -1,3 +1,5 @@
+package aqs;
+
 /**
  * 学习 Thread 中的 join() 方法
  */

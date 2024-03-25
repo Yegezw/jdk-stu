@@ -1,3 +1,5 @@
+package aqs;
+
 import aqs.synchronization_tool.CyclicBarrier;
 
 import java.util.concurrent.BrokenBarrierException;

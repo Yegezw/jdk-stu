@@ -1,16 +1,18 @@
+package aqs;
+
 import aqs.lock.Lock;
 import aqs.lock.ReentrantLock;
 
 import java.util.concurrent.locks.LockSupport;
 
 /**
- * <p>test1() 测试 Out.onws(In in) 函数
+ * <p>test1() 测试 lock.Out.onws(In in) 函数
  * <p>test2() 测试 ReentrantLock
  * <p>test3() 测试先 unpark(thread), 观察 thread.park() 会不会阻塞
  */
 public class Test1 {
 
-    // 测试 Out.onws(In in) 函数
+    // 测试 lock.Out.onws(In in) 函数
     private static void test1() {
         Out    out1 = new Out();
         Out.In in1  = out1.getIn();

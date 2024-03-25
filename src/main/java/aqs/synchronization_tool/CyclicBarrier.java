@@ -142,6 +142,7 @@ public class CyclicBarrier {
 
                 // 最后一个到达屏障点的线程会调用 nextGeneration() 更新 generation
                 // 被唤醒的线程只有通过这里才能退出自旋
+                // 返回值为 index in [0 ... parties - 1]
                 if (g != generation) return index;
 
                 if (timed && nanos <= 0L) {
@@ -160,6 +161,7 @@ public class CyclicBarrier {
      * <p>InterruptedException 当前线程被中断
      * <p>BrokenBarrierException 其它线程调用 await() 期间被中断
      */
+    @SuppressWarnings("all")
     public int await() throws InterruptedException, BrokenBarrierException {
         try {
             return dowait(false, 0L);

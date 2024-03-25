@@ -1,3 +1,5 @@
+package aqs;
+
 import java.util.concurrent.atomic.AtomicStampedReference;
 
 /**
