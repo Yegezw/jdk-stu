@@ -57,24 +57,17 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         // ------------------------------------------------
 
         final boolean transferForSignal(Node node) {
-            /*
-             * If cannot change waitStatus, the node has been cancelled.
-             */
+            // 如果无法更改 waitStatus, 则表示节点已被取消
             if (!Queue.compareAndSetWaitStatus(node, Node.CONDITION, 0)) {
                 return false;
             }
 
-            /*
-             * Splice onto queue and try to set waitStatus of predecessor to
-             * indicate that thread is (probably) waiting. If cancelled or
-             * attempt to set waitStatus fails, wake up to resync (in which
-             * case the waitStatus can be transiently and harmlessly wrong).
-             */
             Node p  = queue.enq(node); // 将 node 放入 sync queue 中, 返回值为 node 的前驱节点
             int  ws = p.waitStatus;
             // 只要前驱节点处于 "取消状态" 或者 "无法将前驱节点的状态修改成 Node.SIGNAL", 那就将 node 所代表的线程唤醒
             if (ws > 0 || !Queue.compareAndSetWaitStatus(p, ws, Node.SIGNAL)) {
                 LockSupport.unpark(node.thread);
+                // node 所代表的线程被唤醒后, 会调用 acquireQueued()
             }
             return true;
         }
@@ -124,22 +117,27 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
         @Override
         public void await() throws InterruptedException {
-            if (Thread.interrupted())
-                throw new InterruptedException();
+            if (Thread.interrupted()) throw new InterruptedException();
+
             Node node          = addConditionWaiter();
             int  savedState    = fullyRelease(node);
             int  interruptMode = 0;
             while (!isOnSyncQueue(node)) {
-                LockSupport.park(this);
-                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
-                    break;
+                LockSupport.park(this); // 线程将在这里苏醒: signal() || 中断
+                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0) break;
             }
-            if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
+            if (acquireQueued(node, savedState) && interruptMode != THROW_IE) {
                 interruptMode = REINTERRUPT;
-            if (node.nextWaiter != null) // clean up if cancelled
-                unlinkCancelledWaiters();
-            if (interruptMode != 0)
+            }
+
+            // 当中断导致的搬迁时
+            // node.ws == 0 && node.nextWaiter != null
+            if (node.nextWaiter != null) {
+                unlinkCancelledWaiters(); // 将 node 与 node.nextWaiter 断开
+            }
+            if (interruptMode != 0) {
                 reportInterruptAfterWait(interruptMode);
+            }
         }
 
         @Override
@@ -163,37 +161,49 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
         @Override
         public long awaitNanos(long nanosTimeout) throws InterruptedException {
-            if (Thread.interrupted())
-                throw new InterruptedException();
+            if (Thread.interrupted()) throw new InterruptedException();
+
             Node       node          = addConditionWaiter();
             int        savedState    = fullyRelease(node);
             final long deadline      = System.nanoTime() + nanosTimeout;
             int        interruptMode = 0;
             while (!isOnSyncQueue(node)) {
                 if (nanosTimeout <= 0L) {
+                    // 超时返回前, 调用取消等待后转移
+                    // CAS node.ws = 0, enq(node) 将 node 搬到 sync queue 中
+                    // 这里并没有断开 node.nextWaiter(无关紧要)
                     transferAfterCancelledWait(node);
                     break;
                 }
-                if (nanosTimeout >= spinForTimeoutThreshold)
+                if (nanosTimeout >= spinForTimeoutThreshold) {
+                    // 线程将在这里苏醒: signal() || 中断 || 超时
                     LockSupport.parkNanos(this, nanosTimeout);
-                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
-                    break;
+                }
+                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0) break;
                 nanosTimeout = deadline - System.nanoTime();
             }
-            if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
+            if (acquireQueued(node, savedState) && interruptMode != THROW_IE) {
                 interruptMode = REINTERRUPT;
-            if (node.nextWaiter != null)
-                unlinkCancelledWaiters();
-            if (interruptMode != 0)
+            }
+
+            // 当中断导致的搬迁时
+            // node.ws == 0 && node.nextWaiter != null
+            if (node.nextWaiter != null) {
+                unlinkCancelledWaiters(); // 将 node 与 node.nextWaiter 断开
+            }
+            if (interruptMode != 0) {
                 reportInterruptAfterWait(interruptMode);
+            }
+
+            // 走到这里证明由 signal() 引起转移, 返回剩余等待时间
             return deadline - System.nanoTime();
         }
 
         @Override
         public boolean await(long time, TimeUnit unit) throws InterruptedException {
             long nanosTimeout = unit.toNanos(time);
-            if (Thread.interrupted())
-                throw new InterruptedException();
+            if (Thread.interrupted()) throw new InterruptedException();
+
             Node       node          = addConditionWaiter();
             int        savedState    = fullyRelease(node);
             final long deadline      = System.nanoTime() + nanosTimeout;
@@ -201,81 +211,119 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
             int        interruptMode = 0;
             while (!isOnSyncQueue(node)) {
                 if (nanosTimeout <= 0L) {
+                    // 超时返回前, 调用取消等待后转移
+                    // CAS node.ws = 0, enq(node) 将 node 搬到 sync queue 中, 返回 true 表示超时返回
+                    // 这里并没有断开 node.nextWaiter(无关紧要)
                     timedout = transferAfterCancelledWait(node);
                     break;
                 }
-                if (nanosTimeout >= spinForTimeoutThreshold)
+                if (nanosTimeout >= spinForTimeoutThreshold) {
+                    // 线程将在这里苏醒: signal() || 中断 || 超时
                     LockSupport.parkNanos(this, nanosTimeout);
-                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
-                    break;
+                }
+                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0) break;
                 nanosTimeout = deadline - System.nanoTime();
             }
-            if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
+            if (acquireQueued(node, savedState) && interruptMode != THROW_IE) {
                 interruptMode = REINTERRUPT;
-            if (node.nextWaiter != null)
-                unlinkCancelledWaiters();
-            if (interruptMode != 0)
+            }
+
+            // 当中断导致的搬迁时
+            // node.ws == 0 && node.nextWaiter != null
+            if (node.nextWaiter != null) {
+                unlinkCancelledWaiters(); // 将 node 与 node.nextWaiter 断开
+            }
+            if (interruptMode != 0) {
                 reportInterruptAfterWait(interruptMode);
+            }
+
+            // 走到这里证明由 signal() || 超时引起转移
+            // 如果是 signal() 则返回 true, 如果是超时则返回 false
             return !timedout;
         }
 
         @Override
         public boolean awaitUntil(Date deadline) throws InterruptedException {
             long abstime = deadline.getTime();
-            if (Thread.interrupted())
-                throw new InterruptedException();
+            if (Thread.interrupted()) throw new InterruptedException();
+
             Node    node          = addConditionWaiter();
             int     savedState    = fullyRelease(node);
             boolean timedout      = false;
             int     interruptMode = 0;
             while (!isOnSyncQueue(node)) {
                 if (System.currentTimeMillis() > abstime) {
+                    // 超时返回前, 调用取消等待后转移
+                    // CAS node.ws = 0, enq(node) 将 node 搬到 sync queue 中, 返回 true 表示超时返回
+                    // 这里并没有断开 node.nextWaiter(无关紧要)
                     timedout = transferAfterCancelledWait(node);
                     break;
                 }
+                // 线程将在这里苏醒: signal() || 中断 || 超时
                 LockSupport.parkUntil(this, abstime);
-                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0)
-                    break;
+                if ((interruptMode = checkInterruptWhileWaiting(node)) != 0) break;
             }
-            if (acquireQueued(node, savedState) && interruptMode != THROW_IE)
+            if (acquireQueued(node, savedState) && interruptMode != THROW_IE) {
                 interruptMode = REINTERRUPT;
-            if (node.nextWaiter != null)
-                unlinkCancelledWaiters();
-            if (interruptMode != 0)
+            }
+
+            // 当中断导致的搬迁时
+            // node.ws == 0 && node.nextWaiter != null
+            if (node.nextWaiter != null) {
+                unlinkCancelledWaiters(); // 将 node 与 node.nextWaiter 断开
+            }
+            if (interruptMode != 0) {
                 reportInterruptAfterWait(interruptMode);
+            }
+
+            // 走到这里证明由 signal() || 超时引起转移
+            // 如果是 signal() 则返回 true, 如果是超时则返回 false
             return !timedout;
         }
 
         // ------------------------------------------------
 
         private int checkInterruptWhileWaiting(Node node) {
+            // interruptMode
+            // 0: 整个过程中一直没有中断发生
+            // THROW_IE: 中断发生在 signal() 之前, await() 返回前需要抛出 InterruptedException
+            // REINTERRUPT: 中断发生在 signal() 之后, 中断晚了, await() 返回前需要需要再自我中断一下
             return Thread.interrupted() ?
                     (transferAfterCancelledWait(node) ? THROW_IE : REINTERRUPT) :
                     0;
         }
 
+        /**
+         * 取消等待后转移
+         * <p>返回值的语义为: 该函数负责将 node 取消等待 + 转移 node 到 sync queue 了吗
+         * <p>中断发生前 node 线程没被 signal(), 则需要该方法 enq(node) 转移, 最终返回 true
+         * <p>中断发生前 node 线程被 signal() 过, 则不需要该方法 enq(node) 转移, 最终返回 false
+         */
+        @SuppressWarnings("all")
         final boolean transferAfterCancelledWait(Node node) {
+            // node 线程没被 signal(), 那么 node 为 CONDITION
+            // 这里 CAS 置 0, enq(node) 将 node 搬到 sync queue 中，返回 true
+            // 注意: 这里并没有断开 node.nextWaiter(因为中断导致的搬迁)
             if (queue.compareAndSetWaitStatus(node, Node.CONDITION, 0)) {
                 queue.enq(node);
                 return true;
             }
-            /*
-             * If we lost out to a signal(), then we can't proceed
-             * until it finishes its enq().  Cancelling during an
-             * incomplete transfer is both rare and transient, so just
-             * spin.
-             */
-            while (!isOnSyncQueue(node))
-                Thread.yield();
-            return false;
+
+            // node 线程有被 signal() 过, 那么 node 不为 CONDITION
+            // 去 sync queue 查看 node 是否存在 
+            // 不存在就 yield(), 用于等待 signal() 线程 enq(node) 完成
+            while (!isOnSyncQueue(node)) Thread.yield();
+
+            return false; // 最后返回 false
         }
 
-        private void reportInterruptAfterWait(int interruptMode)
-                throws InterruptedException {
-            if (interruptMode == THROW_IE)
-                throw new InterruptedException();
-            else if (interruptMode == REINTERRUPT)
-                selfInterrupt();
+        private void reportInterruptAfterWait(int interruptMode) throws InterruptedException {
+            // interruptMode
+            // 0: 整个过程中一直没有中断发生
+            // THROW_IE: 中断发生在 signal() 之前, await() 返回前需要抛出 InterruptedException
+            // REINTERRUPT: 中断发生在 signal() 之后, 中断晚了, await() 返回前需要需要再自我中断一下
+            if (interruptMode == THROW_IE) throw new InterruptedException();
+            else if (interruptMode == REINTERRUPT) selfInterrupt();
         }
 
         // ------------------------------------------------
@@ -414,7 +462,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         }
     }
 
+    @SuppressWarnings("all")
     final boolean isOnSyncQueue(Node node) {
+        // condition queue 不会使用 prev、next 属性, 而是用 nextWaiter
         if (node.waitStatus == Node.CONDITION || node.prev == null) {
             return false;
         }
@@ -433,6 +483,8 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     }
 
     private boolean findNodeFromTail(Node node) {
+        // 从后向前遍历
+        // 查看 sync queue 中是否存在 node
         Node t = queue.tail;
         for (; ; ) {
             if (t == node) return true;
@@ -1023,6 +1075,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 Node next = node.next;
                 if (next != null && next.waitStatus <= 0) Queue.compareAndSetNext(pred, predNext, next);
             } else {
+                // pred == head
                 unparkSuccessor(node);
             }
 
