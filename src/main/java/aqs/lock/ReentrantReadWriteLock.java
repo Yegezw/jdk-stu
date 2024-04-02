@@ -141,6 +141,9 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
                     if (count <= 0) throw unmatchedUnlockException();
                 }
                 --rh.count;
+                // 注意这里可能会发生这种情况: rh = cachedHoldCounter = 当前线程的 rh
+                // 当前线程释放完读锁后, current.ThreadLocalMap.remove(rh)
+                // currentThread 已经删除了 rh, 但 cachedHoldCounter 还指向着被删除的 rh
             }
 
             // 自旋 CAS(c, c - SHARED_UNIT), return next == 0
@@ -210,6 +213,8 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
                         cachedHoldCounter = rh = readHolds.get();
                     } else if (rh.count == 0) {
                         // rh != null && rh.tid == current.tid && rh.count = 0
+                        // 如果 rh 所在的线程刚刚释放读锁, 那么就会把 rh 删除, 但是此时又来获取读锁了, 又得重新设置 rh
+                        // 这里与 tryReleaseShared(int unused) 中 --rh.count; 紧密联系
                         readHolds.set(rh);
                     }
                     rh.count++;
@@ -228,23 +233,34 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
                 // w != 0 已加写锁, 看看加写锁的线程不是自己
                 if (exclusiveCount(c) != 0) {
                     if (getExclusiveOwnerThread() != current) return -1;
+                    // else we hold the exclusive lock; 
+                    // blocking here would cause deadlock.
                 }
 
                 // 未加写锁, 看看读是否应该被阻塞
                 // NonFairSync.readerShouldBlock() 当 !head.next.isShared() 时返回 true
                 // 即 sync queue head.next.thread 为写阻塞时, 申请加读锁将会被阻塞, 避免请求写锁的线程迟迟获取不到写锁
+                // 下面的代码用于保证: 可重入获取读锁的线程, 即使读应该被阻塞, 也不会被阻塞(因为是可重入获取读锁, 而不是第一次获取读锁)
                 else if (readerShouldBlock()) {
                     // 读应该被阻塞
-                    if (firstReader == current) {     // readerShouldBlock() 保证了这种情况不可能发生
+                    if (firstReader == current) {
+                        // assert firstReaderHoldCount > 0;
+                        // 如果是第一个读线程再次尝试获取读锁, 则直接通过, 读锁可重入
                     } else {
+                        // 如果是其它线程尝试获取读锁, 则需要进一步检查当前线程的读锁计数, 以确定是否可以获取读锁
                         if (rh == null) {
                             rh = cachedHoldCounter;
                             if (rh == null || rh.tid != getThreadId(current)) {
                                 rh = readHolds.get(); // 拿到当前正准备获取读锁的线程的 "读锁计数器"
-                                if (rh.count == 0) readHolds.remove();
+                                if (rh.count == 0) {
+                                    // 其它线程第一次获取读锁, 阻塞
+                                    readHolds.remove();
+                                } else {
+                                    // 其它线程持有读锁, 再次获取读锁, 读锁可重入
+                                }
                             }
                         }
-                        if (rh.count == 0) return -1; // 获取读锁失败
+                        if (rh.count == 0) return -1; // 其它线程第一次获取读锁, 阻塞
                     }
                 }
 
@@ -268,7 +284,9 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
                         // rh.tid != current.tid 保证了第一次来获取读锁的线程会进入这个 if 语句
                         // readHolds.get() 会初始化 current.ThreadLocalMap + initialValue()
                         if (rh == null || rh.tid != getThreadId(current)) rh = readHolds.get();
-                            // rh != null && rh.tid == current.tid && rh.count = θ
+                        // rh != null && rh.tid == current.tid && rh.count = θ
+                        // 如果 rh 所在的线程刚刚释放读锁, 那么就会把 rh 删除, 但是此时又来获取读锁了, 又得重新设置 rh
+                        // 这里与 tryReleaseShared(int unused) 中 --rh.count; 紧密联系
                         else if (rh.count == 0) readHolds.set(rh);
                         rh.count++;
                         cachedHoldCounter = rh; // cache for release
