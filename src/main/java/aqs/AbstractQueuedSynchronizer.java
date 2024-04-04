@@ -195,8 +195,9 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 reportInterruptAfterWait(interruptMode);
             }
 
-            // 走到这里证明由 signal() || 超时引起转移, 返回剩余等待时间
-            // 如果是 signal() 则返回值 >= 0, 如果是超时则返回值 < 0
+            // 走到这里证明由 signal() || 超时引起转移, 且已经获得了锁(需要时间), 返回剩余等待时间
+            // 由 signal() 引起转移虽然没超时, 但加上 "获得锁所花费的时间" 就有可能导致超时, 因而返回值 < 0
+            // 返回值 > 0 代表一定由 signal() 引起转移
             return deadline - System.nanoTime();
         }
 
