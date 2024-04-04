@@ -171,7 +171,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 if (nanosTimeout <= 0L) {
                     // 超时返回前, 调用取消等待后转移
                     // CAS node.ws = 0, enq(node) 将 node 搬到 sync queue 中
-                    // 这里并没有断开 node.nextWaiter(无关紧要)
+                    // 这里并没有断开 node.nextWaiter
                     transferAfterCancelledWait(node);
                     break;
                 }
@@ -186,7 +186,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 interruptMode = REINTERRUPT;
             }
 
-            // 当中断导致的搬迁时
+            // 当中断 || 超时导致的搬迁时
             // node.ws == 0 && node.nextWaiter != null
             if (node.nextWaiter != null) {
                 unlinkCancelledWaiters(); // 将 node 与 node.nextWaiter 断开
@@ -195,7 +195,8 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 reportInterruptAfterWait(interruptMode);
             }
 
-            // 走到这里证明由 signal() 引起转移, 返回剩余等待时间
+            // 走到这里证明由 signal() || 超时引起转移, 返回剩余等待时间
+            // 如果是 signal() 则返回值 >= 0, 如果是超时则返回值 < 0
             return deadline - System.nanoTime();
         }
 
@@ -213,7 +214,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 if (nanosTimeout <= 0L) {
                     // 超时返回前, 调用取消等待后转移
                     // CAS node.ws = 0, enq(node) 将 node 搬到 sync queue 中, 返回 true 表示超时返回
-                    // 这里并没有断开 node.nextWaiter(无关紧要)
+                    // 这里并没有断开 node.nextWaiter
                     timedout = transferAfterCancelledWait(node);
                     break;
                 }
@@ -228,7 +229,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 interruptMode = REINTERRUPT;
             }
 
-            // 当中断导致的搬迁时
+            // 当中断 || 超时导致的搬迁时
             // node.ws == 0 && node.nextWaiter != null
             if (node.nextWaiter != null) {
                 unlinkCancelledWaiters(); // 将 node 与 node.nextWaiter 断开
@@ -255,7 +256,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 if (System.currentTimeMillis() > abstime) {
                     // 超时返回前, 调用取消等待后转移
                     // CAS node.ws = 0, enq(node) 将 node 搬到 sync queue 中, 返回 true 表示超时返回
-                    // 这里并没有断开 node.nextWaiter(无关紧要)
+                    // 这里并没有断开 node.nextWaiter
                     timedout = transferAfterCancelledWait(node);
                     break;
                 }
@@ -267,7 +268,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 interruptMode = REINTERRUPT;
             }
 
-            // 当中断导致的搬迁时
+            // 当中断 || 超时导致的搬迁时
             // node.ws == 0 && node.nextWaiter != null
             if (node.nextWaiter != null) {
                 unlinkCancelledWaiters(); // 将 node 与 node.nextWaiter 断开
