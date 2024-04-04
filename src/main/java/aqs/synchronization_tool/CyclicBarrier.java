@@ -83,6 +83,7 @@ public class CyclicBarrier {
     /**
      * <p>InterruptedException 当前线程被中断
      * <p>BrokenBarrierException 其它线程调用 await() 期间被中断
+     * <p>返回值: 当前线程到达 dowait() 的 index, getParties() - 1 为第一个到达, 0 为最后一个到达
      */
     private int dowait(boolean timed, long nanos) throws InterruptedException, BrokenBarrierException, TimeoutException {
         final ReentrantLock lock = this.lock;
@@ -99,7 +100,7 @@ public class CyclicBarrier {
                 throw new InterruptedException(); // 当前线程被中断会抛出 InterruptedException 异常
             }
 
-            // 最后一个到达屏障点的线程 -> command.run() -> nextGeneration() 唤醒所有线程
+            // 最后一个到达屏障点的线程 -> command.run() -> nextGeneration() 唤醒所有线程 -> return 0
             // 如果 command.run() 抛出异常, 则调用 breakBarrier() 以标记本轮屏障已损坏并唤醒所有线程
             int index = --count;
             if (index == 0) {  // tripped
@@ -142,7 +143,7 @@ public class CyclicBarrier {
 
                 // 最后一个到达屏障点的线程会调用 nextGeneration() 更新 generation
                 // 被唤醒的线程只有通过这里才能退出自旋
-                // 返回值为 index in [0 ... parties - 1]
+                // 返回值为 index in [1 ... parties - 1]
                 if (g != generation) return index;
 
                 if (timed && nanos <= 0L) {
