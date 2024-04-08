@@ -16,18 +16,18 @@ public class Test2 {
     }
 
     public static void main(String[] args) {
-        // 固定核心线程 + 无界任务队列
+        // 固定核心线程 + 无界任务队列 LinkedBlockingQueue
         ExecutorService pool1 = Executors.newFixedThreadPool(3);
 
-        // 单个核心线程 + 无界任务队列
+        // 单个核心线程 + 无界任务队列 LinkedBlockingQueue
         ExecutorService pool2 = Executors.newSingleThreadExecutor();
 
-        // 非核心线程 Integer.MAX_VALUE + 存活时间 60 秒 + 零任务队列
+        // 非核心线程 Integer.MAX_VALUE + 存活时间 60 秒 + 零任务队列 SynchronousQueue
         ExecutorService pool3 = Executors.newCachedThreadPool();
 
         // ------------------------------------------------------
 
-        // 周期线程
+        // 周期线程: 核心线程 + 无界任务队列 DelayedWorkQueue
         ScheduledExecutorService pool4 = Executors.newScheduledThreadPool(1);
 
         // 只执行一次
