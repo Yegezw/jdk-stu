@@ -18,9 +18,9 @@ public class Test1 {
         // 核心线程数、线程总数、非核心线程存活时间、非核心线程存活时间单位、工作队列、线程工厂、拒绝策略
 
         // 拒绝策略
-        // 1、CallerRunsPolicy       由任务递交者代替线程池来执行这个任务
+        // 1、DiscardPolicy          放弃执行任务
         // 2、AbortPolicy            放弃执行任务, 并抛出 RejectedExecutionException 异常(默认)
-        // 3、DiscardPolicy          放弃执行任务
+        // 3、CallerRunsPolicy       由任务递交者代替线程池来执行这个任务
         // 4、DiscardOldestPolicy    删掉 workQueue 中的一个任务, 再次调用 execute() 执行当前任务
         pool = new ThreadPoolExecutor(
                 5, 10, 1000, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(15),
