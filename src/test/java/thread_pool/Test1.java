@@ -33,6 +33,18 @@ public class Test1 {
                     }
                 }, new ThreadPoolExecutor.DiscardPolicy()
         );
+
+        // 预先启动 1 个核心线程
+        pool.prestartCoreThread();
+        // 预先启动所有的核心线程
+        pool.prestartAllCoreThreads();
+
+        // 动态调整线程池参数
+        pool.setCorePoolSize(10);
+        pool.setMaximumPoolSize(20);
+
+        // 允许核心线程超时, 即核心线程也会被回收
+        pool.allowCoreThreadTimeOut(true);
     }
 
     /**
