@@ -13,7 +13,7 @@ public class Test7 {
         @Override
         public void run() {
             // ... do something ...
-            latch.countDown();
+            latch.countDown(); // tryReleaseShared(1) 将 state--, 为 0 则唤醒
             // ... do other thing ...
         }
     }
@@ -24,6 +24,7 @@ public class Test7 {
         t1.start();
         t2.start();
 
+        // tryAcquireShared() 判断 state != 0 则阻塞
         latch.await(); // 等待 something 执行完成而非等待线程结束, 并且不需要知道在等谁
         // ... 执行后续逻辑 ...
     }
