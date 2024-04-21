@@ -371,10 +371,13 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
         //  support for instrumentation ------------------------------------------------
 
+        // condition 是否由 sync 创建 ?
         final boolean isOwnedBy(AbstractQueuedSynchronizer sync) {
             return sync == AbstractQueuedSynchronizer.this;
         }
 
+        // condition queue 不为空 ?
+        // 注意: 持有锁的线程才能掉用该方法
         protected final boolean hasWaiters() {
             if (!isHeldExclusively()) throw new IllegalMonitorStateException();
             for (Node w = firstWaiter; w != null; w = w.nextWaiter) {
@@ -383,6 +386,8 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
             return false;
         }
 
+        // condition queue length
+        // 注意: 持有锁的线程才能掉用该方法
         protected final int getWaitQueueLength() {
             if (!isHeldExclusively()) throw new IllegalMonitorStateException();
             int n = 0;
@@ -392,6 +397,8 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
             return n;
         }
 
+        // condition queue Node.thread
+        // 注意: 持有锁的线程才能掉用该方法
         protected final Collection<Thread> getWaitingThreads() {
             if (!isHeldExclusively()) throw new IllegalMonitorStateException();
             ArrayList<Thread> list = new ArrayList<>();
@@ -676,6 +683,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         throw new UnsupportedOperationException();
     }
 
+    // 独占所有者线程 == 当前线程 ?
     protected boolean isHeldExclusively() {
         throw new UnsupportedOperationException();
     }
@@ -1130,10 +1138,12 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
 
     // 其它函数 ==========================================================================================================
 
+    // sync queue 不为空 ?
     public final boolean hasQueuedThreads() {
         return queue.head != queue.tail;
     }
 
+    // thread in sync queue ?
     public final boolean isQueued(Thread thread) {
         if (thread == null) throw new NullPointerException();
         for (Node p = queue.tail; p != null; p = p.prev) {
@@ -1142,6 +1152,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         return false;
     }
 
+    // sync queue length
     public final int getQueueLength() {
         int n = 0;
         for (Node p = queue.tail; p != null; p = p.prev) {
@@ -1150,6 +1161,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         return n;
     }
 
+    // sync queue Node.thread
     public final Collection<Thread> getQueuedThreads() {
         ArrayList<Thread> list = new ArrayList<>();
         for (Node p = queue.tail; p != null; p = p.prev) {
@@ -1159,6 +1171,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         return list;
     }
 
+    // sync queue ExclusiveNode.thread
     public final Collection<Thread> getExclusiveQueuedThreads() {
         ArrayList<Thread> list = new ArrayList<>();
         for (Node p = queue.tail; p != null; p = p.prev) {
@@ -1170,6 +1183,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         return list;
     }
 
+    // sync queue SharedNode.thread
     public final Collection<Thread> getSharedQueuedThreads() {
         ArrayList<Thread> list = new ArrayList<Thread>();
         for (Node p = queue.tail; p != null; p = p.prev) {
@@ -1181,21 +1195,30 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         return list;
     }
 
+    // ------------------------------------------------
+
+    // condition queue 不为空 ?
+    // 注意: 持有锁的线程才能掉用该方法
     public final boolean hasWaiters(ConditionObject condition) {
         if (!owns(condition)) throw new IllegalArgumentException("Not owner");
         return condition.hasWaiters();
     }
 
+    // condition queue length
+    // 注意: 持有锁的线程才能掉用该方法
     public final int getWaitQueueLength(ConditionObject condition) {
         if (!owns(condition)) throw new IllegalArgumentException("Not owner");
         return condition.getWaitQueueLength();
     }
 
+    // condition queue Node.thread
+    // 注意: 持有锁的线程才能掉用该方法
     public final Collection<Thread> getWaitingThreads(ConditionObject condition) {
         if (!owns(condition)) throw new IllegalArgumentException("Not owner");
         return condition.getWaitingThreads();
     }
 
+    // condition 是否由 this 创建 ?
     public final boolean owns(ConditionObject condition) {
         return condition.isOwnedBy(this);
     }
