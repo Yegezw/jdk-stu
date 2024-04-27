@@ -2,6 +2,7 @@ package util;
 
 import java.util.Objects;
 
+@FunctionalInterface
 public interface Consumer<T>
 {
 
