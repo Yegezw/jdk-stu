@@ -42,6 +42,14 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
     protected AbstractQueuedSynchronizer() {
     }
 
+    /**
+     * <p>阻塞: 新节点入队 condition queue, fullyRelease 完全释放锁, 调用 unpark() 阻塞
+     * <p>释放: condition queue 头节点出队, CAS 设置 waitStatus = 0, 然后入队到 sync queue
+     * <p>醒来: 别的线程释放锁后 unpark() 唤醒后它<br>
+     * 它被唤醒后, 检查自己是否在 sync queue, 是的话调用 acquireQueued()<br>
+     * 前驱是 head, 尝试获取锁, 获取成功后将自己设置为头节点, thread 和 prev 置 null<br>
+     * 如果获取锁失败了, 将前驱节点 waitStatus = -1, 最后调用 unpark() 阻塞, 等待被释放锁的线程唤醒
+     */
     // Node 单链表: thread、waitStatus、nextWaiter
     public class ConditionObject implements Condition {
 
