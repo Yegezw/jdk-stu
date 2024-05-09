@@ -1,6 +1,7 @@
 package aqs;
 
 import aqs.synchronization_tool.CyclicBarrier;
+import zzw.Util;
 
 import java.util.concurrent.BrokenBarrierException;
 
@@ -34,6 +35,7 @@ public class Test9 {
             MyThread thread = new MyThread();
             thread.setName("Thread-" + i);
             thread.start();
+            Util.sleep(100);
         }
     }
 }
