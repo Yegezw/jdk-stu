@@ -60,6 +60,7 @@ public class Test1 {
         // poll() 是阻塞函数, 跟 take() 的不同之处在于, poll() 函数可以设置阻塞的超时时间
         // 如果 poll() 的阻塞时间超过 keepAliveTime(在创建线程池时设置的非核心线程空闲销毁时间)
         // 那么 poll() 会从阻塞中返回 null, 因为非核心线程在 keepAliveTime 内, 没有执行任务, 所以会执行线程销毁逻辑
+
         pool.execute(new Runnable() {
             @Override
             public void run() {
