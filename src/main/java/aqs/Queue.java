@@ -5,7 +5,7 @@ import sun.misc.Unsafe;
 import java.lang.reflect.Field;
 
 /**
- * <p>用于实现 AQS 的 sync queue 和 condition queue<br>
+ * <p>用于实现 AQS 的 sync queue 和 condition queue
  * <p>注意: 在多线程情况下, 可以把 AQS 想象为一个共享变量, 通过这个变量可以得到 queue 和 node
  */
 class Queue {
@@ -24,6 +24,7 @@ class Queue {
     // 当一个节点的 waitStatus = SIGNAL, 就说明它的后继节点已经被挂起了(或者马上就要被挂起了)
     // 因此在当前节点释放锁 OR 放弃获取锁时, 如果它的 waitStatus = SIGNAL, 它还要完成一个额外的操作: 唤醒它的后继节点
     // SIGNAL 这个状态的设置常常不是节点自己给自己设的, 而是后继节点设置的
+
     static final class Node {
         static final Node SHARED    = new Node(); // 共享锁
         static final Node EXCLUSIVE = null;       // 排它锁
@@ -77,9 +78,9 @@ class Queue {
         /**
          * 用于调试打印, 不保证线程安全
          */
-        public String toString(boolean syn) {
-            if (syn) {
-                // node in syn queue
+        public String toString(boolean sync) {
+            if (sync) {
+                // node in sync queue
                 return String.format(
                         "Node{thread = %s, waitStatus = %d, nextWaiter = %s}",
                         thread != null ? thread.getName() : null,
@@ -96,6 +97,8 @@ class Queue {
             }
         }
     }
+
+    // =================================================================================================================
 
     /**
      * 头节点既是虚拟头节点, 又是成功获取到锁的节点

@@ -16,7 +16,7 @@ import java.util.concurrent.locks.LockSupport;
  */
 public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchronizer {
 
-    // 1000 ns = 1 ms
+    // 1000 ns = 1 us
     // 1000 ns 的自旋比 1000 ns 的时间阻塞更快, 粗略的估计, 足以在非常短的超时时间内提高响应速度
     // 也就是说, 当线程被中断唤醒, 如果剩余阻塞时间 <= 1000 ns, 那么当前线程将自旋而不是调用 parkNanos(nanosTimeout)
     static final long spinForTimeoutThreshold = 1000L;
