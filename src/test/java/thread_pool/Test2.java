@@ -15,6 +15,7 @@ public class Test2 {
         }
     }
 
+    // 核心线程无界队列、非核心线程 0 队列
     public static void main(String[] args) {
         // 固定核心线程 + 无界任务队列 LinkedBlockingQueue
         ExecutorService pool1 = Executors.newFixedThreadPool(3);
