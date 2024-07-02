@@ -16,11 +16,11 @@ public class Test1
     /**
      * 当 odd == flag 时打印
      */
-    private static void print(boolean flag)
+    private static void print(final boolean flag)
     {
         while (!finish)
         {
-            if (odd == flag)
+            if (odd == flag) // ------ 加锁 ------
             {
                 int num = i++;
                 if (num > 100)
@@ -30,7 +30,7 @@ public class Test1
                 }
 
                 System.out.println(Thread.currentThread().getName() + num);
-                odd = !odd;
+                odd = !odd;  // ------ 解锁 ------
             }
         }
     }
