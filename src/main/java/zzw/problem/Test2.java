@@ -16,11 +16,11 @@ public class Test2
     /**
      * 当 t == flag 时打印
      */
-    private static void print(int flag)
+    private static void print(final int flag)
     {
         while (!finish)
         {
-            if (t == flag)
+            if (t == flag)       // ------ 加锁 ------
             {
                 int num = i++;
                 if (num > 100)
@@ -30,7 +30,7 @@ public class Test2
                 }
 
                 System.out.println(Thread.currentThread().getName() + num);
-                t = (t + 1) % 3;
+                t = (t + 1) % 3; // ------ 解锁 ------
             }
         }
     }

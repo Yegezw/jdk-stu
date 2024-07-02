@@ -16,11 +16,11 @@ public class Test3
     /**
      * 当 t == flag 时打印 i
      */
-    private static void print(int flag, int i)
+    private static void print(final int flag, final int i)
     {
         while (!finish)
         {
-            if (t == flag)
+            if (t == flag)       // ------ 加锁 ------
             {
                 if (count > 10)
                 {
@@ -33,7 +33,7 @@ public class Test3
                 {
                     count++;
                 }
-                t = (t + 1) % 3;
+                t = (t + 1) % 3; // ------ 解锁 ------
             }
         }
     }
