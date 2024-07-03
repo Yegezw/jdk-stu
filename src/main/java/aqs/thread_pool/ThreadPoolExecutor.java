@@ -347,11 +347,11 @@ public class ThreadPoolExecutor extends AbstractExecutorService
         }
 
         // Lock methods
-        //
+        // 上锁 CAS(0, 1)、解锁 state = 0
         // The value 0 represents the unlocked state.
         // The value 1 represents the locked state.
 
-        // Worker 通过继承 AQS 来实现独占锁功能
+        // Worker 通过继承 AQS 来实现 "独占锁 + 不可重入锁" 功能
         // 没有使用 ReentrantLock: 实现不可重入的特性去反映线程现在的执行状态(是否空闲以及是否可以被中断)
         // 1、lock() 一旦获取了独占锁, 表示当前线程正在执行任务中
         // 2、如果正在执行任务, 则不应该中断线程
@@ -764,13 +764,21 @@ public class ThreadPoolExecutor extends AbstractExecutorService
             {
                 return;
             }
+
+            // STOP || ( SHUTDOWN && workQueue.isEmpty() ) 状态下
+            // 可能存在正在执行任务的线程: STOP 下会中断线程、SHUTDOWN 下不会中断线程
+
             // 如果线程数量不为 0, 则中断一个空闲的工作线程, 然后返回
             if (workerCountOf(c) != 0)
             {
                 // Eligible to terminate
+                // 空闲 Worker 的线程正阻塞在 getTask() 中
+                // 发起中断 -> Worker 重新执行 getTask() -> 检查是否可以退出
                 interruptIdleWorkers(ONLY_ONE);
                 return;
             }
+
+            // workerCount = 0
 
             final ReentrantLock mainLock = this.mainLock;
             mainLock.lock();
@@ -1207,6 +1215,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService
         {
             if (!completedAbruptly)
             {
+                // Worker 非异常结束
                 int min = allowCoreThreadTimeOut ? 0 : corePoolSize;
                 if (min == 0 && !workQueue.isEmpty())
                 {
@@ -1254,7 +1263,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService
                 decrementWorkerCount();
                 return null;
                 // getTask() 返回 null 时
-                // 在 runWorker() 中会跳出 while 循环, 然后执行 processWorkerExit()
+                // 在 runWorker() 中会跳出 while 循环, 然后执行 processWorkerExit(w, false)
             }
 
             int wc = workerCountOf(c);
@@ -1264,11 +1273,9 @@ public class ThreadPoolExecutor extends AbstractExecutorService
             boolean timed = allowCoreThreadTimeOut || wc > corePoolSize;
 
             /*
-             * wc > maximumPoolSize 可能在此方法执行阶段同时执行了 setMaximumPoolSize()
-             * timed && timedOut 如果为 true, 表示当前操作需要进行超时控制, 并且上次从阻塞队列中获取任务发生了超时
-             * 如果有效线程数量大于 1 || 阻塞队列是空的, 那么尝试将 workerCount 减 1
-             * 如果减 1 失败, 则返回重试
-             * 如果 wc == 1 时, 就说明当前线程是线程池中唯一的一个线程了
+             * setMaximumPoolSize() 可能导致 wc > maximumPoolSize
+             * 线程数超过 maximumPoolSize || 该线程获取 task 超时, 返回 null -> Worker 退出
+             * 注意: 至少存在一个线程的前提下 (wc > 1) 才能返回 null, 如果 workQueue 为空则无视这个前提
              */
             if ((wc > maximumPoolSize || (timed && timedOut))
                     && (wc > 1 || workQueue.isEmpty()))
@@ -1277,7 +1284,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService
                 {
                     return null;
                     // getTask() 返回 null 时
-                    // 在 runWorker() 中会跳出 while 循环, 然后执行 processWorkerExit()
+                    // 在 runWorker() 中会跳出 while 循环, 然后执行 processWorkerExit(w, false)
                 }
                 continue;
             }
@@ -1291,11 +1298,11 @@ public class ThreadPoolExecutor extends AbstractExecutorService
                 {
                     return r;
                 }
-                timedOut = true;
+                timedOut = true; // poll() keepAliveTime 超时, 在下一轮循环时返回 null -> Worker 退出
             }
             catch (InterruptedException retry)
             {
-                timedOut = false;
+                timedOut = false; // 中断的作用: retry 以重新检查 runState
             }
         }
     }
@@ -1409,10 +1416,8 @@ public class ThreadPoolExecutor extends AbstractExecutorService
         }
         finally
         {
-            // TODO
-            // 此处表明线程池被终止了, Worker 停止了循环
+            // Worker 停止了循环: getTask() 返回 null、run() 抛出异常
             // 将执行 Worker 退出后的逻辑: workerCount - 1、将 Worker 从 workers 移除
-            // 如果 workQueue 为空 && workerCount = 0, 就尝试转换状态为 TIDING 或者 TERMINATED
             processWorkerExit(w, completedAbruptly);
         }
     }
@@ -1681,7 +1686,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService
         {
             checkShutdownAccess();     // 检查权限
             advanceRunState(SHUTDOWN); // RUNNING -> SHUTDOWN
-            interruptIdleWorkers();    // 中断所有可能正在等待任务的线程
+            interruptIdleWorkers();    // 中断所有 getTask() 等待任务的线程
             onShutdown();              // hook for ScheduledThreadPoolExecutor
         }
         finally
@@ -1718,7 +1723,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService
         {
             checkShutdownAccess(); // 检查权限
             advanceRunState(STOP); // RUNNING -> STOP
-            interruptWorkers();    // 中断所有可能正在等待任务的线程
+            interruptWorkers();    // 中断所有已启动的线程( getTask() / task.run() )
             tasks = drainQueue();  // 转移 workQueue 中的任务
         }
         finally
@@ -1886,7 +1891,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService
         this.corePoolSize = corePoolSize;
         if (workerCountOf(ctl.get()) > corePoolSize)
         {
-            interruptIdleWorkers(); // 中断空闲 Worker
+            interruptIdleWorkers(); // 中断所有 getTask() 等待任务的线程
         }
         else if (delta > 0)
         {
@@ -2008,7 +2013,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService
             allowCoreThreadTimeOut = value;
             if (value)
             {
-                interruptIdleWorkers();
+                interruptIdleWorkers(); // 中断所有 getTask() 等待任务的线程
             }
         }
     }
@@ -2034,7 +2039,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService
         this.maximumPoolSize = maximumPoolSize;
         if (workerCountOf(ctl.get()) > maximumPoolSize)
         {
-            interruptIdleWorkers();
+            interruptIdleWorkers(); // 中断所有 getTask() 等待任务的线程
         }
     }
 
@@ -2078,7 +2083,7 @@ public class ThreadPoolExecutor extends AbstractExecutorService
         this.keepAliveTime = keepAliveTime;
         if (delta < 0)
         {
-            interruptIdleWorkers();
+            interruptIdleWorkers(); // 中断所有 getTask() 等待任务的线程
         }
     }
 
