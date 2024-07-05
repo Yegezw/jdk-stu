@@ -256,18 +256,26 @@ public class FutureTask<V> implements RunnableFuture<V>
         Object x = outcome;
 
         // NORMAL
+        // thread1 -> run() -> call()   -> outcome
+        // thread2 -> get() -> report() -> outcome
         if (s == NORMAL)
         {
             return (V) x;
         }
 
         // CANCELLED、INTERRUPTING、INTERRUPTED
+        // thread1 -> run() -> call()   -> 中断 / 取消 -> outcome
+        // thread2 -> get() -> report() -> throw new ExecutionException()
+        // thread1 "被中断 / 取消" 会导致 state 改变, thread2.get() 会抛出 CancellationException
         if (s >= CANCELLED)
         {
             throw new CancellationException();
         }
 
         // EXCEPTIONAL
+        // thread1 -> run() -> call() throw e -> catch e -> outcome = e
+        // thread2 -> get() -> report() -> throw new ExecutionException(outcome)
+        // thread1 产生的异常被捕获并记录到 outcome 中, thread2.get() 会抛出 outcome, 因此只要不 get() 就不会抛出异常
         throw new ExecutionException((Throwable) x);
     }
 
