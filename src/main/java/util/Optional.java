@@ -32,11 +32,17 @@ public final class Optional<T>
         return t;
     }
 
+    /**
+     * value 不能为 null
+     */
     public static <T> Optional<T> of(T value)
     {
         return new Optional<>(value);
     }
 
+    /**
+     * value 可以为 null
+     */
     public static <T> Optional<T> ofNullable(T value)
     {
         return value == null ? empty() : of(value);
@@ -45,7 +51,7 @@ public final class Optional<T>
     // =================================================================================================================
 
     /**
-     * 获取 value
+     * 获取 value, 可能会抛出异常
      */
     public T get()
     {
@@ -57,7 +63,7 @@ public final class Optional<T>
     }
 
     /**
-     * 是否存在
+     * 是否存在 value
      */
     public boolean isPresent()
     {
@@ -65,7 +71,7 @@ public final class Optional<T>
     }
 
     /**
-     * 存在则 consumer.accept(value)
+     * 存在 value 则 consumer.accept(value)
      */
     public void ifPresent(Consumer<? super T> consumer)
     {
