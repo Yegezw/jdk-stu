@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 @SuppressWarnings("all")
 public final class Optional<T>
@@ -12,19 +13,14 @@ public final class Optional<T>
 
     private final T value;
 
-    private Optional()
-    {
-        this.value = null;
-    }
-
     private Optional(T value)
     {
-        this.value = Objects.requireNonNull(value);
+        this.value = value;
     }
 
     // ------------------------------------------------
 
-    private static final Optional<?> EMPTY = new Optional<>();
+    private static final Optional<?> EMPTY = new Optional<>(null);
 
     public static <T> Optional<T> empty()
     {
@@ -37,7 +33,7 @@ public final class Optional<T>
      */
     public static <T> Optional<T> of(T value)
     {
-        return new Optional<>(value);
+        return new Optional<>(Objects.requireNonNull(value));
     }
 
     /**
@@ -45,7 +41,24 @@ public final class Optional<T>
      */
     public static <T> Optional<T> ofNullable(T value)
     {
-        return value == null ? empty() : of(value);
+        return value == null ? (Optional<T>) EMPTY : new Optional<>(value);
+    }
+
+    /**
+     * 不存在 value 则 supplier.get()
+     */
+    public Optional<T> or(Supplier<? extends Optional<? extends T>> supplier)
+    {
+        Objects.requireNonNull(supplier);
+        if (isPresent())
+        {
+            return this;
+        }
+        else
+        {
+            Optional<T> r = (Optional<T>) supplier.get();
+            return Objects.requireNonNull(r);
+        }
     }
 
     // =================================================================================================================
@@ -62,6 +75,26 @@ public final class Optional<T>
         return value;
     }
 
+    public Stream<T> stream()
+    {
+        if (isEmpty())
+        {
+            return Stream.empty();
+        }
+        else
+        {
+            return Stream.of(value);
+        }
+    }
+
+    /**
+     * 是否为空
+     */
+    public boolean isEmpty()
+    {
+        return value == null;
+    }
+
     /**
      * 是否存在 value
      */
@@ -71,13 +104,28 @@ public final class Optional<T>
     }
 
     /**
-     * 存在 value 则 consumer.accept(value)
+     * 存在 value 则 action.accept(value)
      */
-    public void ifPresent(Consumer<? super T> consumer)
+    public void ifPresent(Consumer<? super T> action)
     {
         if (value != null)
         {
-            consumer.accept(value);
+            action.accept(value);
+        }
+    }
+
+    /**
+     * 存在 value 则 action.accept(value), 否则 emptyAction.run()
+     */
+    public void ifPresentOrElse(Consumer<? super T> action, Runnable emptyAction)
+    {
+        if (value != null)
+        {
+            action.accept(value);
+        }
+        else
+        {
+            emptyAction.run();
         }
     }
 
@@ -89,7 +137,7 @@ public final class Optional<T>
     public Optional<T> filter(Predicate<? super T> predicate)
     {
         Objects.requireNonNull(predicate);
-        if (!isPresent())
+        if (isEmpty())
         {
             return this;
         }
@@ -105,7 +153,7 @@ public final class Optional<T>
     public <U> Optional<U> map(Function<? super T, ? extends U> mapper)
     {
         Objects.requireNonNull(mapper);
-        if (!isPresent())
+        if (isEmpty())
         {
             return empty();
         }
@@ -121,7 +169,7 @@ public final class Optional<T>
     public <U> Optional<U> flatMap(Function<? super T, Optional<U>> mapper)
     {
         Objects.requireNonNull(mapper);
-        if (!isPresent())
+        if (isEmpty())
         {
             return empty();
         }
@@ -147,6 +195,18 @@ public final class Optional<T>
     public T orElseGet(Supplier<? extends T> other)
     {
         return value != null ? value : other.get();
+    }
+
+    /**
+     * value 为空则为 throw new NoSuchElementException("No value present")
+     */
+    public T orElseThrow()
+    {
+        if (value == null)
+        {
+            throw new NoSuchElementException("No value present");
+        }
+        return value;
     }
 
     /**
