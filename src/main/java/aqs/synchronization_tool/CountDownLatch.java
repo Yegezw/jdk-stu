@@ -19,6 +19,7 @@ public class CountDownLatch {
         /**
          * state != 0 将会被阻塞
          */
+        @Override
         protected int tryAcquireShared(int acquires) {
             return (getState() == 0) ? 1 : -1;
         }
@@ -26,6 +27,7 @@ public class CountDownLatch {
         /**
          * return (--state) == 0
          */
+        @Override
         protected boolean tryReleaseShared(int releases) {
             // Decrement count; signal when transition to zero
             for (; ; ) {
@@ -66,6 +68,7 @@ public class CountDownLatch {
         return sync.getCount();
     }
 
+    @Override
     public String toString() {
         return super.toString() + "[Count = " + sync.getCount() + "]";
     }

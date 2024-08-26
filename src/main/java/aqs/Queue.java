@@ -106,11 +106,13 @@ class Queue {
     volatile Node head;
     volatile Node tail;
 
-    public static final  Unsafe unsafe;
-    private static final long   headOffset;
-    private static final long   tailOffset;
-    private static final long   nextOffset;
-    private static final long   waitStatusOffset;
+    public static final Unsafe unsafe;
+
+    private static final long headOffset;
+    private static final long tailOffset;
+
+    private static final long nextOffset;
+    private static final long waitStatusOffset;
 
     static {
         try {
@@ -191,6 +193,9 @@ class Queue {
 
     // ====================================================================================
 
+    /**
+     * 用于创建虚拟头节点
+     */
     private boolean compareAndSetHead(Node update) {
         return unsafe.compareAndSwapObject(this, headOffset, null, update);
     }

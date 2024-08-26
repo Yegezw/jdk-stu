@@ -26,7 +26,6 @@ public class Test3 {
             }
         };
 
-
         Thread rt = new Thread(r);
         Thread wt = new Thread(w);
         rt.start();
