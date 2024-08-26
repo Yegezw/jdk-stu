@@ -67,8 +67,9 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
         abstract boolean writerShouldBlock();
 
         /**
-         * 尝试释放写锁(独占锁)
+         * 独占锁: 尝试释放写锁
          */
+        @Override
         protected final boolean tryRelease(int releases) {
             if (!isHeldExclusively()) throw new IllegalMonitorStateException();
             int     nextc = getState() - releases;
@@ -79,8 +80,9 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
         }
 
         /**
-         * 尝试获取写锁(独占锁)
+         * 独占锁: 尝试获取写锁
          */
+        @Override
         protected final boolean tryAcquire(int acquires) {
             /*
              * Walkthrough:
@@ -104,7 +106,7 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
                 if (w == 0 || current != getExclusiveOwnerThread()) return false;
                 if (w + exclusiveCount(acquires) > MAX_COUNT) throw new Error("Maximum lock count exceeded");
 
-                // w != 0 && current != exclusiveOwnerThread 加写锁的线程是自己
+                // w != 0 && current == exclusiveOwnerThread 加写锁的线程是自己
                 setState(c + acquires); // 写锁可重入
                 return true;
             }
@@ -118,8 +120,9 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
         }
 
         /**
-         * 尝试释放读锁(共享锁)
+         * 共享锁: 尝试释放读锁
          */
+        @Override
         protected final boolean tryReleaseShared(int unused) {
             Thread current = Thread.currentThread();
 
@@ -163,9 +166,10 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
         }
 
         /**
-         * 尝试获取读锁(共享锁)
+         * 共享锁: 尝试获取读锁
          */
         @SuppressWarnings("all")
+        @Override
         protected final int tryAcquireShared(int unused) {
             /*
              * Walkthrough:
@@ -340,43 +344,58 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
             }
         }
 
-        // 独占所有者线程(写线程) == 当前线程 ?
+        /**
+         * 独占所有者线程(写线程) == 当前线程 ?
+         */
+        @Override
         protected final boolean isHeldExclusively() {
             // While we must in general read state before owner,
             // we don't need to do so to check if current thread is owner
             return getExclusiveOwnerThread() == Thread.currentThread();
         }
 
-        // 创建条件变量 condition queue
+        /**
+         * 创建条件变量 condition queue
+         */
         final ConditionObject newCondition() {
             return new ConditionObject();
         }
 
         // ============================================================================
 
-        // 获取持有写锁的线程
+        /**
+         * 获取持有写锁的线程
+         */
         final Thread getOwner() {
             // Must read state before owner to ensure memory consistency
             return ((exclusiveCount(getState()) == 0) ? null : getExclusiveOwnerThread());
         }
 
-        // 获取读锁总次数
+        /**
+         * 获取读锁总次数
+         */
         final int getReadLockCount() {
             return sharedCount(getState());
         }
 
-        // 已上写锁 ?
+        /**
+         * 已上写锁 ?
+         */
         final boolean isWriteLocked() {
             return exclusiveCount(getState()) != 0;
         }
 
-        // 获取写锁次数
-        // 注意: 持有写锁的线程才能掉用该方法
+        /**
+         * 获取写锁次数
+         * <br>注意: 持有写锁的线程才能调用该方法
+         */
         final int getWriteHoldCount() {
             return isHeldExclusively() ? exclusiveCount(getState()) : 0;
         }
 
-        // 返回当前线程获取读锁的次数
+        /**
+         * 返回当前线程获取读锁的次数
+         */
         final int getReadHoldCount() {
             if (getReadLockCount() == 0) return 0;
 
@@ -391,7 +410,9 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
             return count;
         }
 
-        // 获取 state
+        /**
+         * 获取 state
+         */
         final int getCount() {
             return getState();
         }
@@ -468,7 +489,9 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
             sync.releaseShared(1);
         }
 
-        // 持有读锁的线程不能创建 condition queue
+        /**
+         * 持有读锁的线程不能创建 condition queue
+         */
         @Override
         public Condition newCondition() {
             throw new UnsupportedOperationException();
@@ -511,19 +534,25 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
             sync.release(1);
         }
 
-        // 持有写锁的线程可以创建 condition queue
+        /**
+         * 持有写锁的线程可以创建 condition queue
+         */
         @Override
         public Condition newCondition() {
             return sync.newCondition();
         }
 
-        // 独占所有者线程(写线程) == 当前线程 ?
+        /**
+         * 独占所有者线程(写线程) == 当前线程 ?
+         */
         public boolean isHeldByCurrentThread() {
             return sync.isHeldExclusively();
         }
 
-        // 获取写锁次数
-        // 注意: 持有写锁的线程才能掉用该方法
+        /**
+         * 获取写锁次数
+         * <br>注意: 持有写锁的线程才能调用该方法
+         */
         public int getHoldCount() {
             return sync.getWriteHoldCount();
         }
@@ -583,78 +612,106 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
 
     // =================================================================================================================
 
-    // 公平锁 ?
+    /**
+     * 公平锁 ?
+     */
     public final boolean isFair() {
         return sync instanceof FairSync;
     }
 
-    // 获取持有写锁的线程
+    /**
+     * 获取持有写锁的线程
+     */
     protected Thread getOwner() {
         return sync.getOwner();
     }
 
-    // 获取读锁总次数
+    /**
+     * 获取读锁总次数
+     */
     public int getReadLockCount() {
         return sync.getReadLockCount();
     }
 
-    // 已上写锁 ?
+    /**
+     * 已上写锁 ?
+     */
     public boolean isWriteLocked() {
         return sync.isWriteLocked();
     }
 
-    // 独占所有者线程(写线程) == 当前线程 ?
+    /**
+     * 独占所有者线程(写线程) == 当前线程 ?
+     */
     public boolean isWriteLockedByCurrentThread() {
         return sync.isHeldExclusively();
     }
 
-    // 获取写锁次数
-    // 注意: 持有写锁的线程才能掉用该方法
+    /**
+     * 获取写锁次数
+     * <br>注意: 持有写锁的线程才能调用该方法
+     */
     public int getWriteHoldCount() {
         return sync.getWriteHoldCount();
     }
 
-    // 返回当前线程获取读锁的次数
+    /**
+     * 返回当前线程获取读锁的次数
+     */
     public int getReadHoldCount() {
         return sync.getReadHoldCount();
     }
 
     // ------------------------------------------------
 
-    // sync queue ExclusiveNode.thread
+    /**
+     * sync queue ExclusiveNode.thread
+     */
     protected Collection<Thread> getQueuedWriterThreads() {
         return sync.getExclusiveQueuedThreads();
     }
 
-    // sync queue SharedNode.thread
+    /**
+     * sync queue SharedNode.thread
+     */
     protected Collection<Thread> getQueuedReaderThreads() {
         return sync.getSharedQueuedThreads();
     }
 
-    // sync queue 不为空 ?
+    /**
+     * sync queue 不为空 ?
+     */
     public final boolean hasQueuedThreads() {
         return sync.hasQueuedThreads();
     }
 
-    // thread in sync queue ?
+    /**
+     * thread in sync queue ?
+     */
     public final boolean hasQueuedThread(Thread thread) {
         return sync.isQueued(thread);
     }
 
-    // sync queue length
+    /**
+     * sync queue length
+     */
     public final int getQueueLength() {
         return sync.getQueueLength();
     }
 
-    // sync queue Node.thread
+    /**
+     * sync queue Node.thread
+     */
     protected Collection<Thread> getQueuedThreads() {
         return sync.getQueuedThreads();
     }
 
     // ------------------------------------------------
 
-    // WriteLock 创建的 condition queue 不为空 ?
-    // 注意: 持有锁的线程才能掉用该方法
+    /**
+     * WriteLock 创建的 condition queue 不为空 ?
+     * <br>注意: 持有锁的线程才能调用该方法
+     */
     public boolean hasWaiters(Condition condition) {
         if (condition == null)
             throw new NullPointerException();
@@ -663,8 +720,10 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
         return sync.hasWaiters((ConditionObject) condition);
     }
 
-    // WriteLock 创建的 condition queue length
-    // 注意: 持有锁的线程才能掉用该方法
+    /**
+     * WriteLock 创建的 condition queue length
+     * <br>注意: 持有锁的线程才能调用该方法
+     */
     public int getWaitQueueLength(Condition condition) {
         if (condition == null)
             throw new NullPointerException();
@@ -673,8 +732,10 @@ public class ReentrantReadWriteLock implements ReadWriteLock {
         return sync.getWaitQueueLength((ConditionObject) condition);
     }
 
-    // WriteLock 创建的 condition queue Node.thread
-    // 注意: 持有锁的线程才能掉用该方法
+    /**
+     * WriteLock 创建的 condition queue Node.thread
+     * <br>注意: 持有锁的线程才能调用该方法
+     */
     protected Collection<Thread> getWaitingThreads(java.util.concurrent.locks.Condition condition) {
         if (condition == null)
             throw new NullPointerException();

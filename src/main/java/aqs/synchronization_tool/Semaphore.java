@@ -29,6 +29,7 @@ public class Semaphore {
             }
         }
 
+        @Override
         protected final boolean tryReleaseShared(int releases) {
             for (; ; ) {
                 int current = getState();
@@ -80,6 +81,7 @@ public class Semaphore {
             super(permits);
         }
 
+        @Override
         protected int tryAcquireShared(int acquires) {
             return nonfairTryAcquireShared(acquires);
         }
@@ -92,6 +94,7 @@ public class Semaphore {
             super(permits);
         }
 
+        @Override
         protected int tryAcquireShared(int acquires) {
             for (; ; ) {
                 // 有排队的前置任务 return -1,  AQS 负责阻塞

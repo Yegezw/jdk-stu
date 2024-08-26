@@ -55,6 +55,7 @@ public class ReentrantLock implements Lock {
         /**
          * 不需要保证线程安全
          */
+        @Override
         protected final boolean tryRelease(int releases) {
             int c = getState() - releases; // c = state - releases
             if (Thread.currentThread() != getExclusiveOwnerThread()) throw new IllegalMonitorStateException();
@@ -71,31 +72,42 @@ public class ReentrantLock implements Lock {
 
         // ------------------------------------------------
 
-        // 独占所有者线程 == 当前线程 ?
+        /**
+         * 独占所有者线程 == 当前线程 ?
+         */
+        @Override
         protected final boolean isHeldExclusively() {
             // While we must in general read state before owner,
             // we don't need to do so to check if current thread is owner
             return getExclusiveOwnerThread() == Thread.currentThread();
         }
 
-        // 创建条件变量 condition queue
+        /**
+         * 创建条件变量 condition queue
+         */
         final ConditionObject newCondition() {
             return new ConditionObject();
         }
 
         // Methods relayed from outer class ------------------------------------------------
 
-        // 获取持有锁的线程
+        /**
+         * 获取持有锁的线程
+         */
         final Thread getOwner() {
             return getState() == 0 ? null : getExclusiveOwnerThread();
         }
 
-        // 获取重入次数
+        /**
+         * 获取锁的重入次数
+         */
         final int getHoldCount() {
             return isHeldExclusively() ? getState() : 0;
         }
 
-        // 已锁定 ?
+        /**
+         * 已锁定 ?
+         */
         final boolean isLocked() {
             return getState() != 0;
         }
@@ -106,6 +118,7 @@ public class ReentrantLock implements Lock {
      */
     static final class NonfairSync extends Sync {
 
+        @Override
         final void lock() {
             if (compareAndSetState(0, 1)) {
                 setExclusiveOwnerThread(Thread.currentThread());
@@ -114,6 +127,7 @@ public class ReentrantLock implements Lock {
             }
         }
 
+        @Override
         protected final boolean tryAcquire(int acquires) {
             return nonfairTryAcquire(acquires);
         }
@@ -124,10 +138,12 @@ public class ReentrantLock implements Lock {
      */
     static final class FairSync extends Sync {
 
+        @Override
         final void lock() {
             acquire(1); // AQS 的模板方法 acquire() 会回调 tryAcquire()
         }
 
+        @Override
         protected final boolean tryAcquire(int acquires) {
             final Thread current = Thread.currentThread();
             int          c       = getState();
@@ -198,73 +214,97 @@ public class ReentrantLock implements Lock {
 
     // =================================================================================================================
 
-    // 获取重入次数
+    /**
+     * 获取锁的重入次数
+     */
     public int getHoldCount() {
         return sync.getHoldCount();
     }
 
-    // 独占所有者线程 == 当前线程 ?
+    /**
+     * 独占所有者线程 == 当前线程 ?
+     */
     public boolean isHeldByCurrentThread() {
         return sync.isHeldExclusively();
     }
 
-    // 已锁定 ?
+    /**
+     * 已锁定 ?
+     */
     public boolean isLocked() {
         return sync.isLocked();
     }
 
-    // 公平锁 ?
+    /**
+     * 公平锁 ?
+     */
     public final boolean isFair() {
         return sync instanceof FairSync;
     }
 
-    // 获取持有锁的线程
+    /**
+     * 获取持有锁的线程
+     */
     protected Thread getOwner() {
         return sync.getOwner();
     }
 
     // ------------------------------------------------
 
-    // sync queue 不为空 ?
+    /**
+     * sync queue 不为空 ?
+     */
     public final boolean hasQueuedThreads() {
         return sync.hasQueuedThreads();
     }
 
-    // thread in sync queue ?
+    /**
+     * thread in sync queue ?
+     */
     public final boolean hasQueuedThread(Thread thread) {
         return sync.isQueued(thread);
     }
 
-    // sync queue length
+    /**
+     * sync queue length
+     */
     public final int getQueueLength() {
         return sync.getQueueLength();
     }
 
-    // sync queue Node.thread
+    /**
+     * sync queue Node.thread
+     */
     protected Collection<Thread> getQueuedThreads() {
         return sync.getQueuedThreads();
     }
 
     // ------------------------------------------------
 
-    // Lock 创建的 condition queue 不为空 ?
-    // 注意: 持有锁的线程才能掉用该方法
+    /**
+     * Lock 创建的 condition queue 不为空 ?
+     * <br>注意: 持有锁的线程才能调用该方法
+     */
     public boolean hasWaiters(Condition condition) {
         if (condition == null) throw new NullPointerException();
         if (!(condition instanceof ConditionObject)) throw new IllegalArgumentException("not owner");
         return sync.hasWaiters((ConditionObject) condition);
     }
 
-    // Lock 创建的 condition queue length
-    // 注意: 持有锁的线程才能掉用该方法
+    /**
+     * Lock 创建的 condition queue length
+     * <br>注意: 持有锁的线程才能调用该方法
+     */
     public int getWaitQueueLength(Condition condition) {
         if (condition == null) throw new NullPointerException();
         if (!(condition instanceof ConditionObject)) throw new IllegalArgumentException("not owner");
         return sync.getWaitQueueLength((ConditionObject) condition);
     }
 
-    // Lock 创建的 condition queue Node.thread
-    // 注意: 持有锁的线程才能掉用该方法
+    /**
+     * Lock 创建的 condition queue Node.thread
+     * <br>注意: 持有锁的线程才能调用该方法
+     */
     protected Collection<Thread> getWaitingThreads(Condition condition) {
         if (condition == null) throw new NullPointerException();
         if (!(condition instanceof ConditionObject)) throw new IllegalArgumentException("not owner");
