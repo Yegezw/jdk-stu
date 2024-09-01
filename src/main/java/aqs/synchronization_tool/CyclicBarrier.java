@@ -83,7 +83,8 @@ public class CyclicBarrier {
     /**
      * <p>InterruptedException 当前线程被中断
      * <p>BrokenBarrierException 其它线程调用 await() 期间被中断
-     * <p>返回值: 当前线程到达 dowait() 的 index, getParties() - 1 为第一个到达, 0 为最后一个到达
+     * <p>返回值: 当前线程到达 dowait() 的 index
+     * <br>index in [0 ... parties - 1], parties - 1 为第一个到达, 0 为最后一个到达
      */
     private int dowait(boolean timed, long nanos) throws InterruptedException, BrokenBarrierException, TimeoutException {
         final ReentrantLock lock = this.lock;
