@@ -42,6 +42,6 @@ public class Executors
         {
             throw new NullPointerException();
         }
-        return new Executors.RunnableAdapter<>(task, result);
+        return new RunnableAdapter<>(task, result);
     }
 }
