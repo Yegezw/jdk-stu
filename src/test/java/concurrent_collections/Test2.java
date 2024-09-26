@@ -1,6 +1,6 @@
 package concurrent_collections;
 
-import java.util.concurrent.DelayQueue;
+import aqs.queue.DelayQueue;
 
 /**
  * 延迟阻塞并发队列 DelayQueue
