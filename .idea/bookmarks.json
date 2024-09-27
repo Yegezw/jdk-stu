@@ -1,0 +1,226 @@
+{
+  "jdk-stu": [
+    {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/CyclicBarrier.java",
+      "linenumber": 88,
+      "name": "循环屏障 await",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantReadWriteLock.java",
+      "linenumber": 321,
+      "name": "共享锁：尝试获取读锁，不走 AQS",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantReadWriteLock.java",
+      "linenumber": 305,
+      "name": "独占锁：尝试获取写锁，不走 AQS",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantReadWriteLock.java",
+      "linenumber": 125,
+      "name": "共享锁：尝试释放读锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantReadWriteLock.java",
+      "linenumber": 172,
+      "name": "共享锁：尝试获取读锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantReadWriteLock.java",
+      "linenumber": 72,
+      "name": "独占锁：尝试释放写锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantReadWriteLock.java",
+      "linenumber": 85,
+      "name": "独占锁：尝试获取写锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/CountDownLatch.java",
+      "linenumber": 30,
+      "name": "释放 countDown",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/CountDownLatch.java",
+      "linenumber": 22,
+      "name": "获取 await",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/Semaphore.java",
+      "linenumber": 32,
+      "name": "释放信号量",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/Semaphore.java",
+      "linenumber": 97,
+      "name": "公平：尝试获取信号量",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/Semaphore.java",
+      "linenumber": 84,
+      "name": "非公平：尝试获取信号量",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantLock.java",
+      "linenumber": 58,
+      "name": "尝试释放锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantLock.java",
+      "linenumber": 146,
+      "name": "公平锁：尝试获取锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantLock.java",
+      "linenumber": 130,
+      "name": "非公平锁：尝试获取锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 379,
+      "name": "条件变量：唤醒所有",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 372,
+      "name": "条件变量：唤醒一个",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 280,
+      "name": "条件变量：可超时等待三",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 237,
+      "name": "条件变量：可超时等待二",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 195,
+      "name": "条件变量：可超时等待一",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 151,
+      "name": "条件变量：可中断等待",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 176,
+      "name": "条件变量：不可中断等待",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 86,
+      "name": "条件变量：转移",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 778,
+      "name": "8、共享模式：释放锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 773,
+      "name": "7、共享模式：可超时锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 768,
+      "name": "6、共享模式：可中断锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 764,
+      "name": "5、共享模式：不可中断锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 590,
+      "name": "4、独占模式：释放锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 585,
+      "name": "3、独占模式：可超时锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 580,
+      "name": "2、独占模式：可中断锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/AbstractQueuedSynchronizer.java",
+      "linenumber": 574,
+      "name": "1、独占模式：不可中断锁",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 252,
+      "name": "report(int s)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 282,
+      "name": "get()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 209,
+      "name": "cancel(boolean mayInterruptIfRunning)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 181,
+      "name": "setException()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 161,
+      "name": "set()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 322,
+      "name": "run()",
+      "bookmarkType": "DEFAULT"
+    }
+  ]
+}
