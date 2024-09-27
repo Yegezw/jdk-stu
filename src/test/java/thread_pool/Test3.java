@@ -4,6 +4,10 @@ import zzw.Util;
 
 import java.util.Random;
 import java.util.concurrent.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+import aqs.thread_pool.ExecutorCompletionService;
 
 /**
  * 完成服务 CompletionService
@@ -17,28 +21,9 @@ public class Test3
     {
         // 线程池
         ExecutorService pool = Executors.newFixedThreadPool(5);
-
-        /*
-         * ExecutorCompletionService 有成员变量 BlockingQueue completionQueue
-         *
-         * QueueingFuture extends FutureTask
-         * {
-         *     protected void done() { completionQueue.add(task); }
-         * }
-         *
-         * public Future<V> submit(Callable callable)
-         * {
-         *     task         = new FutureTask(callable);
-         *     queueingTask = new QueueingFuture(task);
-         *     pool.execute(queueingTask);
-         *     return task;
-         * }
-         *
-         * public Future<V> poll() {
-         *     return completionQueue.poll();
-         * }
-         */
+        // 完成服务
         CompletionService<Integer> service = new ExecutorCompletionService<>(pool);
+
         for (int i = 0; i < 5; i++)
         {
             final int res = i;
