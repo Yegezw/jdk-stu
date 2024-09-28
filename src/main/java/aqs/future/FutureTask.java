@@ -164,6 +164,8 @@ public class FutureTask<V> implements RunnableFuture<V>
         if (UNSAFE.compareAndSwapInt(this, stateOffset, NEW, COMPLETING))
         {
             outcome = v;
+            // StoreStore barrier
+            // this.state = NORMAL
             UNSAFE.putOrderedInt(this, stateOffset, NORMAL); // final state
             finishCompletion(); // waiters -> done() -> callable
         }
@@ -184,6 +186,8 @@ public class FutureTask<V> implements RunnableFuture<V>
         if (UNSAFE.compareAndSwapInt(this, stateOffset, NEW, COMPLETING))
         {
             outcome = t;
+            // StoreStore barrier
+            // this.state = EXCEPTIONAL
             UNSAFE.putOrderedInt(this, stateOffset, EXCEPTIONAL); // final state
             finishCompletion(); // waiters -> done() -> callable
         }
@@ -230,8 +234,9 @@ public class FutureTask<V> implements RunnableFuture<V>
                 }
                 finally
                 {
-                    // final state
-                    UNSAFE.putOrderedInt(this, stateOffset, INTERRUPTED);
+                    // StoreStore barrier
+                    // this.state = INTERRUPTED
+                    UNSAFE.putOrderedInt(this, stateOffset, INTERRUPTED); // final state
                 }
             }
         }
@@ -616,8 +621,7 @@ public class FutureTask<V> implements RunnableFuture<V>
                         }
                     }
                     // q.thread == null 则 q == node 需要删除 q, 同时 pred == null 则 q == waiters
-                    else if (!UNSAFE.compareAndSwapObject(this, waitersOffset,
-                            q, s))
+                    else if (!UNSAFE.compareAndSwapObject(this, waitersOffset, q, s))
                     {
                         continue retry;
                     }
