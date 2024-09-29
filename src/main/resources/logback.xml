@@ -1,0 +1,19 @@
+<configuration debug="false" scan="true" scanPeriod="60 seconds">
+
+    <!-- 定义全局日志格式 -->
+    <property name="PATTERN"
+              value="%yellow(%date{yyyy-MM-dd HH:mm:ss}) %highlight(%-5level) %boldMagenta([%thread]) %cyan(%logger{50}) - %msg%n"/>
+
+    <!-- 控制台输出 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 根 logger -->
+    <root level="info">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+</configuration>
