@@ -7,6 +7,36 @@
       "bookmarkType": "DEFAULT"
     },
     {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/CountDownLatch.java",
+      "linenumber": 30,
+      "name": "释放 countDown",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/CountDownLatch.java",
+      "linenumber": 22,
+      "name": "获取 await",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/Semaphore.java",
+      "linenumber": 32,
+      "name": "释放信号量",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/Semaphore.java",
+      "linenumber": 97,
+      "name": "公平：尝试获取信号量",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/Semaphore.java",
+      "linenumber": 84,
+      "name": "非公平：尝试获取信号量",
+      "bookmarkType": "DEFAULT"
+    },
+    {
       "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantReadWriteLock.java",
       "linenumber": 321,
       "name": "共享锁：尝试获取读锁，不走 AQS",
@@ -40,36 +70,6 @@
       "fileDescriptor": "$/src/main/java/aqs/lock/ReentrantReadWriteLock.java",
       "linenumber": 85,
       "name": "独占锁：尝试获取写锁",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/CountDownLatch.java",
-      "linenumber": 30,
-      "name": "释放 countDown",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/CountDownLatch.java",
-      "linenumber": 22,
-      "name": "获取 await",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/Semaphore.java",
-      "linenumber": 32,
-      "name": "释放信号量",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/Semaphore.java",
-      "linenumber": 97,
-      "name": "公平：尝试获取信号量",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/Semaphore.java",
-      "linenumber": 84,
-      "name": "非公平：尝试获取信号量",
       "bookmarkType": "DEFAULT"
     },
     {
@@ -187,6 +187,264 @@
       "bookmarkType": "DEFAULT"
     },
     {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2424,
+      "name": "已经执行完毕的任务总数 getCompletedTaskCount()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2391,
+      "name": "任务总数 getTaskCount()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2368,
+      "name": "创建线程的最大数量 getLargestPoolSize()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2339,
+      "name": "当前活跃的线程数量 getActiveCount()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2315,
+      "name": "当前创建的线程数量 getPoolSize()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2301,
+      "name": "任务队列 getQueue()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2163,
+      "name": "线程工厂 getThreadFactory()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2136,
+      "name": "拒绝策略 getRejectedExecutionHandler()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2109,
+      "name": "核心超时 allowsCoreThreadTimeOut()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2059,
+      "name": "超时时间 getKeepAliveTime(TimeUnit unit)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2012,
+      "name": "最大线程 getMaximumPoolSize()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1976,
+      "name": "8、核心线程 getCorePoolSize()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2257,
+      "name": "清空已取消任务 purge()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2240,
+      "name": "移除任务 remove(Runnable task)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2209,
+      "name": "启动所有核心 prestartAllCoreThreads()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2176,
+      "name": "启动一个核心 prestartCoreThread()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2148,
+      "name": "线程工厂 setThreadFactory(ThreadFactory threadFactory)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2121,
+      "name": "拒绝策略 setRejectedExecutionHandler(RejectedExecutionHandler handler)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2080,
+      "name": "核心超时 allowCoreThreadTimeOut(boolean value)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2031,
+      "name": "超时时间 setKeepAliveTime(long time, TimeUnit unit)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1993,
+      "name": "最大线程 setMaximumPoolSize(int maximumPoolSize)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1940,
+      "name": "7、核心线程 setCorePoolSize(int corePoolSize)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1878,
+      "name": "6、awaitTermination(long timeout, TimeUnit unit)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2568,
+      "name": "钩子函数 terminated()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 783,
+      "name": "5、tryTerminate()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 888,
+      "name": "中断非初始 Worders",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1828,
+      "name": "4、shutdownNow()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 974,
+      "name": "中断空闲 Worders",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1792,
+      "name": "3、shutdown()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2558,
+      "name": "钩子函数 afterExecute(Runnable r, Throwable t)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 2508,
+      "name": "钩子函数 beforeExecute(Thread t, Runnable r)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1242,
+      "name": "processWorkerExit(Worker w, boolean completedAbruptly)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1321,
+      "name": "消费者获取任务 getTask()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1438,
+      "name": "runWorker(Worker w)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 349,
+      "name": "2、线程开始执行 run()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1210,
+      "name": "addWorkerFailed(Worker w)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1074,
+      "name": "addWorker(Runnable firstTask, boolean core)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 1705,
+      "name": "1、生产者提交任务 execute(Runnable command)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 596,
+      "name": "锁 mainLock",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 357,
+      "name": "锁 Worker",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ExecutorCompletionService.java",
+      "linenumber": 86,
+      "name": "将 RunnableFuture\u003cV\u003e 包装成 FutureTask\u003cVoid\u003e",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ExecutorCompletionService.java",
+      "linenumber": 176,
+      "name": "submit",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
+      "linenumber": 294,
+      "name": "submit() 与拒绝策略",
+      "bookmarkType": "DEFAULT"
+    },
+    {
       "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
       "linenumber": 257,
       "name": "report(int s)",
@@ -196,6 +454,18 @@
       "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
       "linenumber": 287,
       "name": "get()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 321,
+      "name": "钩子函数 done()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 485,
+      "name": "finishCompletion()",
       "bookmarkType": "DEFAULT"
     },
     {
@@ -220,252 +490,6 @@
       "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
       "linenumber": 327,
       "name": "run()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2419,
-      "name": "已经执行完毕的任务总数 getCompletedTaskCount()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2386,
-      "name": "任务总数 getTaskCount()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2363,
-      "name": "创建线程的最大数量 getLargestPoolSize()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2334,
-      "name": "当前活跃的线程数量 getActiveCount()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2310,
-      "name": "当前创建的线程数量 getPoolSize()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2296,
-      "name": "任务队列 getQueue()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2158,
-      "name": "线程工厂 getThreadFactory()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2131,
-      "name": "拒绝策略 getRejectedExecutionHandler()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2104,
-      "name": "核心超时 allowsCoreThreadTimeOut()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2054,
-      "name": "超时时间 getKeepAliveTime(TimeUnit unit)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2007,
-      "name": "最大线程 getMaximumPoolSize()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1971,
-      "name": "8、核心线程 getCorePoolSize()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2252,
-      "name": "清空已取消任务 purge()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2235,
-      "name": "移除任务 remove(Runnable task)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2204,
-      "name": "启动所有核心 prestartAllCoreThreads()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2171,
-      "name": "启动一个核心 prestartCoreThread()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2143,
-      "name": "线程工厂 setThreadFactory(ThreadFactory threadFactory)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2116,
-      "name": "拒绝策略 setRejectedExecutionHandler(RejectedExecutionHandler handler)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2075,
-      "name": "核心超时 allowCoreThreadTimeOut(boolean value)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2026,
-      "name": "超时时间 setKeepAliveTime(long time, TimeUnit unit)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1988,
-      "name": "最大线程 setMaximumPoolSize(int maximumPoolSize)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1935,
-      "name": "7、核心线程 setCorePoolSize(int corePoolSize)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1873,
-      "name": "6、awaitTermination(long timeout, TimeUnit unit)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2563,
-      "name": "钩子函数 terminated()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 777,
-      "name": "5、tryTerminate()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 882,
-      "name": "中断非初始 Worders",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1823,
-      "name": "4、shutdownNow()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 969,
-      "name": "中断空闲 Worders",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1787,
-      "name": "3、shutdown()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2553,
-      "name": "钩子函数 afterExecute(Runnable r, Throwable t)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 2503,
-      "name": "钩子函数 beforeExecute(Thread t, Runnable r)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1237,
-      "name": "processWorkerExit(Worker w, boolean completedAbruptly)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1316,
-      "name": "消费者获取任务 getTask()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1433,
-      "name": "runWorker(Worker w)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 349,
-      "name": "2、线程开始执行 run()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1205,
-      "name": "addWorkerFailed(Worker w)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1069,
-      "name": "addWorker(Runnable firstTask, boolean core)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 1700,
-      "name": "1、生产者提交任务 execute(Runnable command)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 590,
-      "name": "锁 mainLock",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 357,
-      "name": "锁 Worker",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
-      "linenumber": 294,
-      "name": "submit() 与拒绝策略",
       "bookmarkType": "DEFAULT"
     },
     {

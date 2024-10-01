@@ -92,12 +92,13 @@ public class ExecutorCompletionService<V> implements CompletionService<V>
          *     {
          *         RunnableFuture<V>.run()
          *         {
-         *             result  = Callable<V>.call();
+         *             result  = Callable<V>.call(); 入参
          *             outcome = result;
          *         };
+         *         return null;
          *     };
          *
-         *     outcome = null;
+         *     outcome = result;
          *
          *     done()
          *     {
@@ -183,12 +184,13 @@ public class ExecutorCompletionService<V> implements CompletionService<V>
      *     {
      *         FutureTask<V>.run()
      *         {
-     *             result  = Callable<V>.call();
+     *             result  = Callable<V>.call(); 入参
      *             outcome = result;
      *         };
+     *         return null;
      *     };
      *
-     *     outcome = null;
+     *     outcome = result;
      *
      *     done()
      *     {
@@ -232,7 +234,7 @@ public class ExecutorCompletionService<V> implements CompletionService<V>
     }
 
     /**
-     * 返回空
+     * 可返回空
      */
     public Future<V> poll()
     {
@@ -240,7 +242,7 @@ public class ExecutorCompletionService<V> implements CompletionService<V>
     }
 
     /**
-     * 阻塞 + 返回空
+     * 可超时阻塞 + 可返回空
      */
     public Future<V> poll(long timeout, TimeUnit unit) throws InterruptedException
     {

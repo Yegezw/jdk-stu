@@ -45,8 +45,8 @@ public class Test4
     private static void sum2()
     {
         // 在使用 ForkJoinPool 时不推荐使用 Runnable 和 Callable
-        // Runnable -> RecursiveAction
-        // Callable -> RecursiveTask
+        // Runnable -> RecursiveAction 递归操作
+        // Callable -> RecursiveTask   递归任务
         ForkJoinPool pool = (ForkJoinPool) Executors.newWorkStealingPool();
 
         long start = System.nanoTime();
@@ -74,7 +74,7 @@ public class Test4
         @Override
         protected Integer compute()
         {
-            // 在这个方法中，需要设置好任务拆分的逻辑以及聚合的逻辑
+            // 在这个方法中, 需要设置好任务拆分的逻辑以及聚合的逻辑
             int sum    = 0;
             int stride = r - l;
 
