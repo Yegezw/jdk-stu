@@ -407,19 +407,25 @@ public class ThreadPoolExecutor extends AbstractExecutorService
             return true;
         }
 
-        // 走 AQS.SyncQueue
+        /**
+         * 走 AQS.SyncQueue
+         */
         public void lock()
         {
             acquire(1);
         }
 
-        // 不走 AQS
+        /**
+         * 不走 AQS
+         */
         public boolean tryLock()
         {
             return tryAcquire(1);
         }
 
-        // 走 AQS.SyncQueue
+        /**
+         * 走 AQS.SyncQueue
+         */
         public void unlock()
         {
             release(1);
@@ -921,13 +927,12 @@ public class ThreadPoolExecutor extends AbstractExecutorService
         /*
          * 中断空闲状态 Worker
          * 如果 onlyOne = true, 则最多 interrupt 一个 Worker
+         * 为保证线程池最终能关闭, 需要传播 shutdown 信号, 以免所有线程都在 workQueue.take() 等待
          *
          * 终止流程已经开始指的是 STOP || ( SHUTDOWN && workQueue.isEmpty() )
          * 只有当终止流程已经开始, 但线程池还有 Worker 线程时, tryTerminate() 方法才会进行 onlyOne = true 的调用
          *
-         * 在这种情况下, 最多有一个 Worker 被中断, 为了传播 shutdown 信号, 以免所有的线程都在等待
-         * 为保证线程池最终能终止，这个操作总是中断一个空闲 Worker
-         * 而 shutdown() 中断所有空闲 Worker, 来保证空闲线程及时退出
+         * 而 shutdown() 则中断所有空闲 Worker, 来保证空闲线程及时退出
          */
         final ReentrantLock mainLock = this.mainLock;
         mainLock.lock();
