@@ -511,7 +511,7 @@ public class FutureTask<V> implements RunnableFuture<V>
             }
         }
 
-        done();
+        done(); // 钩子方法
 
         callable = null;        // to reduce footprint
     }
