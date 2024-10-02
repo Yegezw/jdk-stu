@@ -1,4 +1,4 @@
-package util;
+package util.func.consumer;
 
 import java.util.Objects;
 
