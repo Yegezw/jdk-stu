@@ -1,5 +1,7 @@
 package util;
 
+import util.func.consumer.Consumer;
+
 public class Test
 {
 
