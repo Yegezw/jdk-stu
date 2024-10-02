@@ -1,5 +1,7 @@
 package util;
 
+import util.func.consumer.Consumer;
+
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Function;
@@ -42,23 +44,6 @@ public final class Optional<T>
     public static <T> Optional<T> ofNullable(T value)
     {
         return value == null ? (Optional<T>) EMPTY : new Optional<>(value);
-    }
-
-    /**
-     * 不存在 value 则 supplier.get()
-     */
-    public Optional<T> or(Supplier<? extends Optional<? extends T>> supplier)
-    {
-        Objects.requireNonNull(supplier);
-        if (isPresent())
-        {
-            return this;
-        }
-        else
-        {
-            Optional<T> r = (Optional<T>) supplier.get();
-            return Objects.requireNonNull(r);
-        }
     }
 
     // =================================================================================================================
@@ -180,6 +165,23 @@ public final class Optional<T>
     }
 
     // =================================================================================================================
+
+    /**
+     * 不存在 value 则 supplier.get()
+     */
+    public Optional<T> or(Supplier<? extends Optional<? extends T>> supplier)
+    {
+        Objects.requireNonNull(supplier);
+        if (isPresent())
+        {
+            return this;
+        }
+        else
+        {
+            Optional<T> r = (Optional<T>) supplier.get();
+            return Objects.requireNonNull(r);
+        }
+    }
 
     /**
      * value 为空则为 other

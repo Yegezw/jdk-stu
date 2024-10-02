@@ -4,7 +4,7 @@ import java.util.Objects;
 
 /**
  * <a href="https://alexn.org/blog/2023/06/19/java-volatiles/">Java Volatiles<a/>
- * <p>This is a "single-producer, single-consumer" (SPSC) queue.
+ * <br>This is a "single-producer, single-consumer" (SPSC) queue.
  */
 public class SPSCRiskyQueue<T>
 {
