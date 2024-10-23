@@ -1,12 +1,10 @@
 package thread_pool;
 
 import com.google.common.util.concurrent.*;
+import zzw.Util;
 
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 public class Test6
 {
@@ -251,10 +249,88 @@ public class Test6
          */
     }
 
+    /**
+     * 代码执行在哪个线程上
+     */
+    private static void caller()
+    {
+        ExecutorService threadPool = new ThreadPoolExecutor(
+                10, 10,
+                0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(100)
+        );
+        CompletableFuture<String> future = CompletableFuture.supplyAsync(
+                () ->
+                {
+                    System.out.println("supplyAsync 执行线程 " + info());
+                    return "";
+                },
+                threadPool
+        );
+
+        // 如果 future 中的业务操作已经执行完毕并返回
+        // 则该 thenApply 直接由当前 main 线程执行
+        // 否则, 将会由执行以上业务操作的 threadPool 中的线程执行
+        Util.sleep(1000);
+        future.thenApply(
+                value ->
+                {
+                    System.out.println("thenApply 执行线程 " + info());
+                    return value + "1";
+                }
+        );
+        // 使用 ForkJoinPool 中的共用线程池 CommonPool
+        future.thenApplyAsync(
+                value ->
+                {
+                    System.out.println("thenApplyAsync1 执行线程 " + info());
+                    return value + "1";
+                }
+        );
+        // 使用指定线程池
+        future.thenApplyAsync(
+                value ->
+                {
+                    System.out.println("thenApplyAsync2 执行线程 " + info());
+                    return value + "1";
+                },
+                threadPool
+        );
+    }
+
+    /**
+     * 死锁
+     */
+    @SuppressWarnings("all")
+    private static Object deadlock()
+    {
+        // 单核心线程池
+        ExecutorService threadPool = Executors.newSingleThreadExecutor();
+        CompletableFuture<String> father = CompletableFuture.supplyAsync(
+                () ->
+                {
+                    // do sth
+                    return CompletableFuture.supplyAsync(
+                            () ->
+                            {
+                                System.out.println("child");
+                                return "child";
+                            }
+                            , threadPool
+                    ).join(); // 父任务等待子任务
+                },
+                threadPool
+        );
+        return father.join(); // 主线程等待父任务
+    }
+
     public static void main(String[] args) throws Exception
     {
         testGuavaCallBack();
         LATCH.await();
         testCompletable();
+
+        caller();
+        deadlock();
     }
 }
