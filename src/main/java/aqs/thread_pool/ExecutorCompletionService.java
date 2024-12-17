@@ -98,7 +98,7 @@ public class ExecutorCompletionService<V> implements CompletionService<V>
          *         return null;
          *     };
          *
-         *     outcome = result;
+         *     outcome = result = null;
          *
          *     done()
          *     {
@@ -190,7 +190,7 @@ public class ExecutorCompletionService<V> implements CompletionService<V>
      *         return null;
      *     };
      *
-     *     outcome = result;
+     *     outcome = result = null;
      *
      *     done()
      *     {

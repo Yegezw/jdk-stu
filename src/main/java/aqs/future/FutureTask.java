@@ -7,6 +7,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.locks.LockSupport;
 
 /**
+ * FutureTask 的核心在于描述任务<br>
  * <a href="https://segmentfault.com/a/1190000016542779">预备知识</a>
  * <a href="https://segmentfault.com/a/1190000016572591">深入理解 FutureTask</a>
  */
@@ -104,7 +105,7 @@ public class FutureTask<V> implements RunnableFuture<V>
             throw new NullPointerException();
         }
         this.callable = callable;
-        this.state    = NEW;       // ensure visibility of callable
+        this.state    = NEW;       // 确保 callable 的可见性
     }
 
     /**
@@ -122,7 +123,7 @@ public class FutureTask<V> implements RunnableFuture<V>
     public FutureTask(Runnable runnable, V result)
     {
         this.callable = Executors.callable(runnable, result);
-        this.state    = NEW;       // ensure visibility of callable
+        this.state    = NEW;       // 确保 callable 的可见性
     }
 
     // ------------------------------------------------
@@ -440,6 +441,12 @@ public class FutureTask<V> implements RunnableFuture<V>
      */
     private void handlePossibleCancellationInterrupt(int s)
     {
+        /*
+         * 因为 cancel(true) 中是 "单线程 + 有序性 + 写"
+         * UNSAFE.putOrderedInt(this, stateOffset, INTERRUPTED);
+         * 所以这里要 "多线程 + 可见性 + 循环读"
+         */
+
         // It is possible for our interrupter to stall before getting a
         // chance to interrupt us.  Let's spin-wait patiently.
         if (s == INTERRUPTING)
