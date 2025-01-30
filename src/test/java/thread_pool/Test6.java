@@ -6,6 +6,9 @@ import zzw.Util;
 import java.util.List;
 import java.util.concurrent.*;
 
+/**
+ * <a href="https://tech.meituan.com/2022/05/12/principles-and-practices-of-completablefuture.html">CompletableFuture 原理与实践 - 外卖商家端 API 的异步化</a>
+ */
 public class Test6
 {
 
@@ -322,6 +325,24 @@ public class Test6
                 threadPool
         );
         return father.join(); // 主线程等待父任务
+    }
+
+    /**
+     * <p>提取真实异常
+     * <p>CompletableFuture 在回调方法中对异常进行了包装
+     * <br>大部分异常会封装成 CompletionException 后抛出, 真正的异常存储在 cause 属性中
+     * <br>因此如果调用链中经过了回调方法处理, 那么就需要用 Throwable.getCause() 方法提取真正的异常
+     * <br>但是有些情况下会直接返回真正的异常, 最好使用工具类提取异常
+     */
+    public static Throwable extractRealException(Throwable throwable)
+    {
+        // 这里判断异常类型是否为 CompletionException、ExecutionException
+        // 如果是则进行提取, 否则直接返回, 注意不判断 CancellationException, 它代表任务被取消
+        if (throwable instanceof CompletionException || throwable instanceof ExecutionException)
+        {
+            if (throwable.getCause() != null) return throwable.getCause();
+        }
+        return throwable;
     }
 
     public static void main(String[] args) throws Exception
