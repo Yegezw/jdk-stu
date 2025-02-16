@@ -721,6 +721,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         // 头节点既是虚拟头节点, 又是成功获取到锁的节点
         int ws = node.waitStatus;
         // 独占模式下, 获得锁的线程只有一个, 获得锁的线程去释放锁, 不存在竞争
+        // if (state != 0) return; 减少伪唤醒
         if (ws < 0) Queue.compareAndSetWaitStatus(node, ws, 0);
 
         /*
@@ -739,7 +740,11 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
                 if (t.waitStatus <= 0) s = t;
             }
         }
-        if (s != null) LockSupport.unpark(s.thread); // 唤醒它
+        if (s != null) LockSupport.unpark(s.thread); // 唤醒它, 但 s.thread 可能还是无法获取锁 (非公平锁下别的线程插队了)
+        // if (s != null) {
+        //     if (state != 0) Queue.compareAndSetWaitStatus(node, ws, Node.SIGNAL); 减少伪唤醒
+        //     else LockSupport.unpark(s.thread);
+        // }
     }
 
     // 共享模式模板方法 + 抽象方法 ==========================================================================================
