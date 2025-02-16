@@ -722,6 +722,8 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         int ws = node.waitStatus;
         // 独占模式下, 获得锁的线程只有一个, 获得锁的线程去释放锁, 不存在竞争
         if (ws < 0) Queue.compareAndSetWaitStatus(node, ws, 0);
+        // if (ws >= 0 || state == 0) return; 减少伪唤醒
+        // Queue.compareAndSetWaitStatus(node, ws, 0);
 
         /*
          * Thread to unpark is held in successor, which is normally
