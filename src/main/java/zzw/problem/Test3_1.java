@@ -4,7 +4,7 @@ package zzw.problem;
  * 三个线程分别打印 1 2 3, 顺序执行 10 次
  */
 @SuppressWarnings("all")
-public class Test3
+public class Test3_1
 {
 
     /**
