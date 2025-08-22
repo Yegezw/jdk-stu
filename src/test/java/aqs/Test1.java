@@ -81,6 +81,7 @@ public class Test1 {
 
         // 主线程 main
         LockSupport.unpark(thread); // 建议阅读 LockSupport.unpark(Thread thread) 注释
+        // thread.interrupt(); 中断也是一样的
         System.out.println("主线程 main 调用 unpark 完成");
     }
 
