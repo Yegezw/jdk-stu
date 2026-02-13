@@ -70,5 +70,4 @@ public class InheritableThreadLocal<T> extends ThreadLocal<T>
     {
         // t.inheritableThreadLocals = new ThreadLocalMap(this, firstValue); fixme 报错
     }
-
 }

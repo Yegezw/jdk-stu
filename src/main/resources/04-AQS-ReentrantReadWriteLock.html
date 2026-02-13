@@ -1,0 +1,1978 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AQS + ReentrantReadWriteLock 动画流程图</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --soft: #f1f5f9;
+            --line: #dbe3ef;
+            --text: #0f172a;
+            --muted: #475569;
+            --blue: #2563eb;
+            --violet: #7c3aed;
+            --green: #16a34a;
+            --orange: #ea580c;
+            --red: #dc2626;
+            --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(165deg, #eaf2ff 0%, var(--bg) 56%);
+            color: var(--text);
+            line-height: 1.56;
+        }
+
+        .app {
+            width: min(1420px, calc(100vw - 20px));
+            margin: 12px auto 26px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .app > *,
+        .layout > *,
+        .stage > * {
+            min-width: 0;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            box-shadow: var(--shadow);
+        }
+
+        .hero {
+            padding: 14px 16px;
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-size: clamp(22px, 2.6vw, 31px);
+            line-height: 1.26;
+        }
+
+        .hero p {
+            margin: 7px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .hero .tip {
+            margin-top: 8px;
+            padding: 7px 10px;
+            background: var(--soft);
+            border: 1px solid #d6e2f6;
+            border-radius: 9px;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        .controls {
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .model-pill {
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .btn {
+            border: 1px solid #c8d5ea;
+            background: #ffffff;
+            color: #1e293b;
+            border-radius: 9px;
+            padding: 7px 11px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.18s ease;
+        }
+
+        .btn:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .btn:focus-visible,
+        .step-chip:focus-visible {
+            outline: 2px solid var(--blue);
+            outline-offset: 2px;
+        }
+
+        .btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .control-note {
+            margin-left: auto;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1.52fr 1fr;
+            gap: 10px;
+            align-items: start;
+        }
+
+        .stage {
+            padding: 10px;
+            display: grid;
+            grid-template-rows: auto 148px 196px minmax(0, 1fr);
+            gap: 8px;
+            transition: box-shadow 0.18s ease, border-color 0.18s ease;
+            align-content: start;
+        }
+
+        .stage.flash {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13), var(--shadow);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 210px 280px minmax(0, 1fr);
+            gap: 7px;
+        }
+
+        .status {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #f8fbff;
+            padding: 7px;
+            min-height: 90px;
+        }
+
+        .status span {
+            display: block;
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .status strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 13px;
+            line-height: 1.36;
+            color: #0f172a;
+        }
+
+        .status-state strong {
+            font-family: Menlo, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .flow {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fcfdff;
+            padding: 8px;
+        }
+
+        .flow h3 {
+            margin: 0 0 6px;
+            font-size: 13px;
+            color: #334155;
+        }
+
+        .flow-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .flow-node {
+            border: 1px solid #d9e3f2;
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 6px 8px;
+            font-size: 12px;
+            white-space: nowrap;
+            color: #334155;
+            transition: 0.18s ease;
+        }
+
+        .flow-node.active {
+            border-color: #60a5fa;
+            background: #eff6ff;
+            color: #1e40af;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+        }
+
+        .flow-arrow {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .lane {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fcfdff;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .lane h3 {
+            margin: 0 0 7px;
+            font-size: 13px;
+            color: #334155;
+        }
+
+        .lane-threads {
+            min-height: 196px;
+        }
+
+        .lane-queue {
+            min-height: 530px;
+        }
+
+        .threads {
+            display: grid;
+            gap: 7px;
+            grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+            grid-auto-rows: 76px;
+            align-content: start;
+            flex: 1;
+        }
+
+        .thread {
+            border: 1px solid #d9e3f2;
+            border-radius: 9px;
+            background: #ffffff;
+            padding: 7px;
+            height: 76px;
+            transition: 0.18s ease;
+        }
+
+        .thread.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .thread-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .thread-name {
+            font-size: 13px;
+            color: #0f172a;
+            line-height: 1;
+        }
+
+        .thread p {
+            margin: 6px 0 0;
+            font-size: 12px;
+            color: #475569;
+            line-height: 1.34;
+        }
+
+        .badge {
+            border-radius: 999px;
+            padding: 3px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 1;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+
+        .b-running {
+            background: #e0f2fe;
+            color: #0c4a6e;
+            border-color: #7dd3fc;
+        }
+
+        .b-ready {
+            background: #ecfdf5;
+            color: #14532d;
+            border-color: #86efac;
+        }
+
+        .b-parked {
+            background: #fff7ed;
+            color: #9a3412;
+            border-color: #fdba74;
+        }
+
+        .b-idle {
+            background: #f1f5f9;
+            color: #334155;
+            border-color: #cbd5e1;
+        }
+
+        .b-ex {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fca5a5;
+        }
+
+        .queue-wrap {
+            min-height: 100%;
+            display: grid;
+            gap: 8px;
+            align-content: start;
+        }
+
+        .queue-empty {
+            border: 1px dashed #cbd5e1;
+            border-radius: 10px;
+            background: #f8fafc;
+            color: #64748b;
+            padding: 12px;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .queue-forward {
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+            background: #ffffff;
+            padding: 9px;
+            display: flex;
+            align-items: stretch;
+            gap: 7px;
+            overflow-x: auto;
+        }
+
+        .node {
+            min-width: 168px;
+            border: 1px solid #d9e3f2;
+            border-radius: 10px;
+            background: #f8fbff;
+            padding: 7px;
+            transition: 0.18s ease;
+        }
+
+        .node.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .node.head {
+            border-color: #818cf8;
+            background: #eef2ff;
+        }
+
+        .node.cancelled {
+            border-color: #fca5a5;
+            background: #fff1f2;
+        }
+
+        .node-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .node-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .node-role {
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            padding: 2px 7px;
+            font-size: 10px;
+            font-weight: 700;
+            color: #334155;
+            background: #ffffff;
+        }
+
+        .node-line {
+            font-size: 11px;
+            color: #334155;
+            line-height: 1.38;
+        }
+
+        .node-line .label {
+            color: #64748b;
+            margin-right: 2px;
+        }
+
+        .ws {
+            font-family: Menlo, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+            font-weight: 700;
+        }
+
+        .ws.neg {
+            color: #b45309;
+        }
+
+        .ws.pos {
+            color: #b91c1c;
+        }
+
+        .ws.zero {
+            color: #0f172a;
+        }
+
+        .arrow {
+            align-self: center;
+            color: #94a3b8;
+            font-size: 16px;
+            font-weight: 700;
+            flex: 0 0 auto;
+        }
+
+        .pointer-panel {
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+            background: #f8fbff;
+            padding: 8px;
+            display: grid;
+            gap: 4px;
+        }
+
+        .pointer-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+        }
+
+        .pointer-line {
+            font-size: 11px;
+            color: #475569;
+            font-family: Menlo, Consolas, monospace;
+            overflow-wrap: anywhere;
+        }
+
+        .explain {
+            padding: 10px;
+            display: grid;
+            grid-template-rows: auto auto auto repeat(5, auto) auto;
+            gap: 8px;
+            align-content: start;
+        }
+
+        .explain h2 {
+            margin: 0;
+            font-size: 19px;
+            line-height: 1.32;
+        }
+
+        .summary {
+            margin: 0;
+            color: #334155;
+            font-size: 13px;
+        }
+
+        .focus-box {
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border-radius: 9px;
+            padding: 7px 9px;
+            font-size: 12px;
+            line-height: 1.38;
+        }
+
+        .detail {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #ffffff;
+            padding: 7px 8px;
+        }
+
+        .detail h3 {
+            margin: 0 0 6px;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        .detail ul {
+            margin: 0;
+            padding-left: 18px;
+            display: grid;
+            gap: 5px;
+        }
+
+        .detail li {
+            color: #334155;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .detail li.empty {
+            color: #94a3b8;
+            list-style: none;
+            margin-left: -18px;
+        }
+
+        .note {
+            border: 1px dashed #cbd5e1;
+            border-radius: 9px;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 12px;
+            padding: 7px 9px;
+        }
+
+        .timeline-card {
+            padding: 10px;
+        }
+
+        .timeline-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .timeline-head h3 {
+            margin: 0;
+            font-size: 14px;
+            color: #334155;
+        }
+
+        #stepCounter {
+            font-size: 12px;
+            color: #64748b;
+            font-weight: 700;
+        }
+
+        .timeline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+        }
+
+        .step-chip {
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #334155;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: 0.18s ease;
+        }
+
+        .step-chip:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .step-chip.done {
+            border-color: #bbf7d0;
+            background: #f0fdf4;
+            color: #166534;
+        }
+
+        .step-chip.active {
+            border-color: #60a5fa;
+            background: #eff6ff;
+            color: #1e3a8a;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+        }
+
+        .legend ul {
+            margin: 0;
+            padding-left: 18px;
+            display: grid;
+            gap: 6px;
+        }
+
+        .legend li {
+            font-size: 12px;
+            color: #334155;
+            line-height: 1.42;
+        }
+
+        @media (max-width: 1160px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .status-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+
+            .stage {
+                grid-template-rows: auto 160px 204px minmax(0, 1fr);
+            }
+        }
+
+        @media (max-width: 760px) {
+            .app {
+                width: calc(100% - 10px);
+                margin-top: 6px;
+            }
+
+            .controls {
+                gap: 6px;
+            }
+
+            .control-note {
+                width: 100%;
+                margin-left: 0;
+            }
+
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stage {
+                grid-template-rows: auto 176px 216px minmax(0, 1fr);
+            }
+
+            .lane-threads {
+                min-height: auto;
+            }
+
+            .lane-queue {
+                min-height: 500px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <section class="hero card">
+        <h1>AQS + ReentrantReadWriteLock 动画流程图</h1>
+        <p>以 Doug Lea 视角拆解 NonfairSync：写锁重入、读锁共享、共享传播、写线程排队唤醒，并补充读锁重入计数细节与降级/升级语义</p>
+        <p class="tip">state 按位编码：<strong>高 16 位 = 读计数</strong>，<strong>低 16 位 = 写重入计数</strong>；除主流程外，末尾还包含两个独立分支：读锁重入内部计数、写降级与读升级语义</p>
+    </section>
+
+    <section class="controls card" aria-label="流程控制">
+        <button id="prevBtn" class="btn" type="button">⏮ 上一步</button>
+        <button id="nextBtn" class="btn" type="button">⏭ 下一步</button>
+        <button id="resetBtn" class="btn" type="button">↺ 重置</button>
+        <div class="model-pill">演示模型：ReentrantReadWriteLock.NonfairSync</div>
+        <div class="control-note">快捷键：← 上一步，→ 下一步，Home 重置（线程：T1/T2/T3/T4）</div>
+    </section>
+
+    <section class="layout">
+        <article id="stage" class="stage card" aria-live="off">
+            <div class="status-grid">
+                <div class="status status-state">
+                    <span>state（高 16 读 | 低 16 写）</span>
+                    <strong id="stateValue">-</strong>
+                </div>
+                <div class="status">
+                    <span>持有摘要</span>
+                    <strong id="ownerValue">-</strong>
+                </div>
+                <div class="status">
+                    <span>队列摘要</span>
+                    <strong id="queueValue">-</strong>
+                </div>
+            </div>
+
+            <section class="flow" aria-label="流程图总览">
+                <h3>流程图总览（当前步骤会高亮）</h3>
+                <div id="flowWrite" class="flow-row"></div>
+                <div id="flowRead" class="flow-row"></div>
+            </section>
+
+            <section class="lane lane-threads">
+                <h3>线程状态</h3>
+                <div id="threadLane" class="threads"></div>
+            </section>
+
+            <section class="lane lane-queue">
+                <h3>Sync Queue（双向链表，prev/next）</h3>
+                <div id="queueWrap" class="queue-wrap"></div>
+            </section>
+        </article>
+
+        <aside class="explain card">
+            <h2 id="stepTitle">-</h2>
+            <p id="stepSummary" class="summary">-</p>
+            <div id="focusBox" class="focus-box">-</div>
+
+            <section class="detail">
+                <h3>调用链（当前步骤）</h3>
+                <ul id="chainList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>方法内细节点（逐条）</h3>
+                <ul id="microList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>CAS / 原子操作</h3>
+                <ul id="casList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>关键字段变化</h3>
+                <ul id="deltaList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>为何进入下一步</h3>
+                <ul id="nextList"></ul>
+            </section>
+
+            <div class="note">说明：这是教学化 “逐指令” 视图，聚焦 AQS 主干路径（acquire / acquireShared / release / releaseShared）+ 独立语义分支</div>
+        </aside>
+    </section>
+
+    <section class="timeline-card card">
+        <div class="timeline-head">
+            <h3>完整时间线（可点击跳转）</h3>
+            <span id="stepCounter">-</span>
+        </div>
+        <div id="timeline" class="timeline"></div>
+    </section>
+
+    <section class="timeline-card card legend">
+        <div class="timeline-head">
+            <h3>位运算与语义速记</h3>
+        </div>
+        <ul>
+            <li>SHARED_UNIT = 1 &lt;&lt; 16，即每获得 1 个读锁，state 增加 65536</li>
+            <li>exclusiveCount(state) = state &amp; 0xFFFF；sharedCount(state) = state &gt;&gt;&gt; 16</li>
+            <li>写锁可重入只增加低 16 位；读锁并发增加高 16 位</li>
+            <li>读释放只有在总读计数归零时才返回 true，从而触发 releaseShared 的传播唤醒</li>
+            <li>setHeadAndPropagate 的触发判定：<strong>propagate &gt; 0</strong>，或<strong>旧/新 head 为 null</strong>，或<strong>旧/新 head.waitStatus &lt; 0</strong></li>
+            <li>读锁重入计数有三层：firstReader / cachedHoldCounter / ThreadLocalHoldCounter</li>
+            <li>降级支持（写-&gt;读），升级不支持（读-&gt;写，可能自阻塞）</li>
+        </ul>
+    </section>
+</div>
+
+<script>
+(() => {
+    const flowRows = {
+        write: [
+            {id: "w_lock", label: "WriteLock.lock"},
+            {id: "w_try", label: "tryAcquire(write)"},
+            {id: "w_enq", label: "addWaiter(EXCLUSIVE)"},
+            {id: "w_park", label: "park"},
+            {id: "w_unpark", label: "release(write) / 条件 unparkSuccessor"}
+        ],
+        read: [
+            {id: "r_lock", label: "ReadLock.lock"},
+            {id: "r_try", label: "tryAcquireShared/fullTry"},
+            {id: "r_enq", label: "addWaiter(SHARED)"},
+            {id: "r_head", label: "setHeadAndPropagate"},
+            {id: "r_rel", label: "releaseShared"}
+        ]
+    };
+
+    const steps = [
+        {
+            title: "1) 初始化：state=0（读=0，写=0）",
+            summary: "构造 ReentrantReadWriteLock(false) 后，底层 NonfairSync 的 AQS.state 为 0，Sync Queue 尚未建立",
+            focus: "方法焦点：new ReentrantReadWriteLock(false) -> new NonfairSync()",
+            state: "0x00000000 (R=0, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=0",
+            queueSummary: "Sync Queue 空",
+            flowActive: [],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "new ReentrantReadWriteLock(false)",
+                "new NonfairSync()",
+                "AQS.state = 0"
+            ],
+            micro: [
+                "高 16 位和低 16 位都为 0，表示没有读者也没有写者",
+                "head/tail 都是 null，AQS 双向队列尚未惰性初始化"
+            ],
+            cas: [
+                "构造阶段无 CAS"
+            ],
+            delta: [
+                "state 初始化为 0",
+                "head/tail: null / null"
+            ],
+            next: [
+                "T1 先走写锁 fast path，展示独占获取 + owner 设置"
+            ]
+        },
+        {
+            title: "2) T1 写锁首次获取：CAS(0->1) 成功",
+            summary: "T1 调用 WriteLock.lock()，进入 acquire(1)->tryAcquire(1)，命中 c==0 分支并 CAS 成功，成为写锁 owner",
+            focus: "方法焦点：WriteLock.lock -> Sync.acquire -> tryAcquire",
+            state: "0x00000001 (R=0, W=1)",
+            owner: "writeOwner=T1, writeHolds=1, readHolds=0",
+            queueSummary: "仍无等待节点",
+            flowActive: ["w_lock", "w_try"],
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "写锁获取成功", active: true},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "WriteLock.lock()",
+                "AQS.acquire(1)",
+                "Sync.tryAcquire(1)",
+                "CAS(state, 0, 1)",
+                "setExclusiveOwnerThread(T1)"
+            ],
+            micro: [
+                "NonfairSync.writerShouldBlock() 固定返回 false，不做公平性前置阻塞",
+                "CAS 成功后 low 16 位从 0 变 1，写重入计数生效",
+                "owner 记录为 T1"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => success"
+            ],
+            delta: [
+                "state: 0x00000000 -> 0x00000001",
+                "exclusiveOwnerThread: null -> T1"
+            ],
+            next: [
+                "同线程再次写锁获取将走重入分支，不再 CAS"
+            ]
+        },
+        {
+            title: "3) T1 写锁重入：低 16 位递增",
+            summary: "T1 再次调用 WriteLock.lock()，tryAcquire 看到 current==owner，直接 setState(c+1) 完成重入",
+            focus: "方法焦点：tryAcquire 重入分支（current == owner）",
+            state: "0x00000002 (R=0, W=2)",
+            owner: "writeOwner=T1, writeHolds=2, readHolds=0",
+            queueSummary: "仍无等待节点",
+            flowActive: ["w_lock", "w_try"],
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "写锁重入成功", active: true},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "WriteLock.lock() by T1",
+                "AQS.acquire(1)",
+                "Sync.tryAcquire(1)",
+                "current == owner -> setState(c + 1)"
+            ],
+            micro: [
+                "c=1，exclusiveCount(c)=1，owner 仍是 T1",
+                "可重入时直接写 state，不需要 CAS 竞争"
+            ],
+            cas: [
+                "本步无 CAS（重入直接 setState）"
+            ],
+            delta: [
+                "state: 0x00000001 -> 0x00000002",
+                "writeHolds: 1 -> 2"
+            ],
+            next: [
+                "T2 尝试读锁，会因他线程持有写锁而走共享入队"
+            ]
+        },
+        {
+            title: "4) T2 读锁失败：共享节点 N2 入队",
+            summary: "T2 调用 ReadLock.lock()，tryAcquireShared 因写锁 owner!=current 返回 -1，随后 addWaiter(SHARED) + enq",
+            focus: "方法焦点：ReadLock.lock -> acquireShared -> addWaiter(SHARED)",
+            state: "0x00000002 (R=0, W=2)",
+            owner: "writeOwner=T1, writeHolds=2, readHolds=0",
+            queueSummary: "H <-> N2(SHARED)",
+            flowActive: ["r_lock", "r_try", "r_enq"],
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "仍持有写锁"},
+                {name: "T2", state: "RUNNING", desc: "创建共享节点 N2", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "ReadLock.lock()",
+                "AQS.acquireShared(1)",
+                "Sync.tryAcquireShared(1) => -1",
+                "addWaiter(SHARED)",
+                "enq(N2)"
+            ],
+            micro: [
+                "只要有写锁且 owner 不是当前线程，读获取直接失败",
+                "队列为空时先 CAS(head) 建立哨兵，再 CAS(tail) 完成尾插"
+            ],
+            cas: [
+                "CAS(head, null, H) => success",
+                "CAS(tail, H, N2) => success"
+            ],
+            delta: [
+                "head: null -> H",
+                "tail: null -> N2",
+                "N2.mode=SHARED"
+            ],
+            next: [
+                "N2 在 acquireShared 循环里先写前驱 SIGNAL，再进入 park"
+            ]
+        },
+        {
+            title: "5) N2 首轮自旋：设置 H.waitStatus=SIGNAL",
+            summary: "N2 在 shouldParkAfterFailedAcquire 中把前驱 H 的 waitStatus 从 0 改为 -1，建立 “释放时唤醒后继” 协议",
+            focus: "方法焦点：shouldParkAfterFailedAcquire(pred=H, node=N2)",
+            state: "0x00000002 (R=0, W=2)",
+            owner: "writeOwner=T1, writeHolds=2, readHolds=0",
+            queueSummary: "H(ws=-1) <-> N2",
+            flowActive: ["r_enq"],
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "持有写锁"},
+                {name: "T2", state: "RUNNING", desc: "第一轮自旋，尚未阻塞", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireShared(1)",
+                "p = node.predecessor() => H",
+                "tryAcquireShared(1) => -1",
+                "shouldParkAfterFailedAcquire(H, N2)"
+            ],
+            micro: [
+                "第一次只负责写 SIGNAL，不会立刻 park",
+                "这是 AQS 防丢唤醒的关键两阶段协议"
+            ],
+            cas: [
+                "CAS(H.waitStatus, 0, -1) => success"
+            ],
+            delta: [
+                "H.waitStatus: 0 -> -1 (SIGNAL)"
+            ],
+            next: [
+                "第二轮 shouldParkAfterFailedAcquire 返回 true，N2 进入 park"
+            ]
+        },
+        {
+            title: "6) N2 第二轮：共享节点进入 park",
+            summary: "再次循环时 pred.ws 已是 SIGNAL，N2 调用 parkAndCheckInterrupt 进入阻塞等待",
+            focus: "方法焦点：parkAndCheckInterrupt",
+            state: "0x00000002 (R=0, W=2)",
+            owner: "writeOwner=T1, writeHolds=2, readHolds=0",
+            queueSummary: "H(ws=-1) <-> N2(PARKED)",
+            flowActive: ["r_enq"],
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "持有写锁"},
+                {name: "T2", state: "PARKED", desc: "等待被 unpark", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2"},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireShared for-loop#2",
+                "shouldParkAfterFailedAcquire(H, N2) => true",
+                "LockSupport.park(this)"
+            ],
+            micro: [
+                "线程状态从 RUNNING 进入 PARKED",
+                "此时仍未获取读锁，仅是排队等待"
+            ],
+            cas: [
+                "本步无新 CAS"
+            ],
+            delta: [
+                "T2: RUNNING -> PARKED"
+            ],
+            next: [
+                "T3 也来读锁，会继续作为 SHARED 节点入队"
+            ]
+        },
+        {
+            title: "7) T3 读锁入队：形成共享队列 H->N2->N3",
+            summary: "T3 读锁同样因 T1 持写锁失败，入队为 N3(SHARED)，并在前驱 N2 后阻塞",
+            focus: "方法焦点：共享尾插 + 后继阻塞",
+            state: "0x00000002 (R=0, W=2)",
+            owner: "writeOwner=T1, writeHolds=2, readHolds=0",
+            queueSummary: "H(ws=-1) <-> N2(ws=-1) <-> N3(PARKED)",
+            flowActive: ["r_lock", "r_try", "r_enq"],
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "持有写锁"},
+                {name: "T2", state: "PARKED", desc: "N2 等待唤醒"},
+                {name: "T3", state: "PARKED", desc: "N3 入队后阻塞", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2"},
+                {id: "N2", role: "NODE", thread: "T2", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "H", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "ReadLock.lock() by T3",
+                "tryAcquireShared(1) => -1",
+                "addWaiter(SHARED)",
+                "CAS(tail, N2, N3)",
+                "park"
+            ],
+            micro: [
+                "共享节点也严格按 FIFO 链接到尾部",
+                "N3 阻塞前同样需要前驱 N2 处于 SIGNAL 协议状态"
+            ],
+            cas: [
+                "CAS(tail, N2, N3) => success",
+                "CAS(N2.waitStatus, 0, -1) => success"
+            ],
+            delta: [
+                "tail: N2 -> N3",
+                "N2.next: null -> N3",
+                "T3: RUNNING -> PARKED"
+            ],
+            next: [
+                "T1 先释放一次写锁（仅减少重入层数），不会唤醒读者"
+            ]
+        },
+        {
+            title: "8) T1 第一次 WriteLock.unlock：仅重入计数减 1",
+            summary: "T1 调用 WriteLock.unlock()，tryRelease 把低 16 位从 2 减到 1，free=false，不触发唤醒",
+            focus: "方法焦点：tryRelease（free=false）",
+            state: "0x00000001 (R=0, W=1)",
+            owner: "writeOwner=T1, writeHolds=1, readHolds=0",
+            queueSummary: "H <-> N2 <-> N3（仍阻塞）",
+            flowActive: ["w_unpark"],
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "释放一次重入", active: true},
+                {name: "T2", state: "PARKED", desc: "继续等待"},
+                {name: "T3", state: "PARKED", desc: "继续等待"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2"},
+                {id: "N2", role: "NODE", thread: "T2", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "H", next: "N3"},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null"}
+            ],
+            chain: [
+                "WriteLock.unlock()",
+                "AQS.release(1)",
+                "Sync.tryRelease(1) => free=false"
+            ],
+            micro: [
+                "写重入释放遵循 “减计数直至 0 才真正释放”",
+                "owner 仍然是 T1，读线程不能越过"
+            ],
+            cas: [
+                "本步无 CAS（tryRelease 使用 setState）"
+            ],
+            delta: [
+                "state: 0x00000002 -> 0x00000001",
+                "writeHolds: 2 -> 1"
+            ],
+            next: [
+                "第二次 WriteLock.unlock 才会 free=true 并 unpark 头结点后继"
+            ]
+        },
+        {
+            title: "9) T1 第二次 WriteLock.unlock：释放成功并唤醒 N2",
+            summary: "T1 再次调用 WriteLock.unlock()，state 变 0，owner 清空，release(1) 调用 unparkSuccessor(head) 唤醒 N2",
+            focus: "方法焦点：release -> unparkSuccessor(H)",
+            state: "0x00000000 (R=0, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=0",
+            queueSummary: "H(ws=0) <-> N2(READY) <-> N3(PARKED)",
+            flowActive: ["w_unpark"],
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "完成写锁彻底释放", active: true},
+                {name: "T2", state: "READY", desc: "被 unpark"},
+                {name: "T3", state: "PARKED", desc: "仍在队列"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "NODE", thread: "T2", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "H", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null"}
+            ],
+            chain: [
+                "WriteLock.unlock()",
+                "AQS.release(1)",
+                "Sync.tryRelease(1) => free=true",
+                "unparkSuccessor(H)"
+            ],
+            micro: [
+                "free=true 条件满足：exclusiveCount(nextc)==0",
+                "owner 先置 null，再唤醒队首后继节点"
+            ],
+            cas: [
+                "CAS(H.waitStatus, -1, 0) => success"
+            ],
+            delta: [
+                "state: 0x00000001 -> 0x00000000",
+                "exclusiveOwnerThread: T1 -> null",
+                "T2: PARKED -> READY"
+            ],
+            next: [
+                "N2 被调度后进入 tryAcquireShared，成功后触发共享传播"
+            ]
+        },
+        {
+            title: "10) N2 获取读锁成功：setHeadAndPropagate 唤醒 N3",
+            summary: "N2 被唤醒后命中 p==head，tryAcquireShared CAS 成功把读计数加 1，随后 setHeadAndPropagate 触发共享传播",
+            focus: "方法焦点：tryAcquireShared + setHeadAndPropagate",
+            state: "0x00010000 (R=1, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=1(T2)",
+            queueSummary: "N2(head, ws=0) <-> N3(READY)",
+            flowActive: ["r_try", "r_head"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "已释放写锁"},
+                {name: "T2", state: "RUNNING", desc: "已获取读锁并成 head", active: true},
+                {name: "T3", state: "READY", desc: "被共享传播唤醒"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireShared(1) by N2/T2",
+                "p==head && tryAcquireShared(1) => r=1",
+                "setHeadAndPropagate(N2, 1)",
+                "doReleaseShared() -> unparkSuccessor(N2)"
+            ],
+            micro: [
+                "CAS(state, 0, 65536) 成功，sharedCount 从 0 到 1",
+                "N2 升格为新 head，旧 H 脱链",
+                "传播判定是：propagate>0，或旧/新 head 为 null，或旧/新 head.waitStatus<0；本步 r=1，因此明确触发传播"
+            ],
+            cas: [
+                "CAS(state, 0, 65536) => success",
+                "CAS(N2.waitStatus, -1, 0) => success"
+            ],
+            delta: [
+                "state: 0x00000000 -> 0x00010000",
+                "head: H -> N2",
+                "T3: PARKED -> READY"
+            ],
+            next: [
+                "N3 继续竞争读锁，演示共享并发下多个读者同时持有"
+            ]
+        },
+        {
+            title: "11) N3 读锁获取成功：读计数变 2",
+            summary: "N3 被唤醒后再次 tryAcquireShared，CAS 把 state 从 65536 增到 131072，成为新 head",
+            focus: "方法焦点：共享后继节点获取 + head 前移",
+            state: "0x00020000 (R=2, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=2(T2,T3)",
+            queueSummary: "head=tail=N3（无后继等待）",
+            flowActive: ["r_try", "r_head"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "持有读锁"},
+                {name: "T3", state: "RUNNING", desc: "持有读锁并成新 head", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N3", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireShared(1) by N3/T3",
+                "p==head && tryAcquireShared(1) => r=1",
+                "setHeadAndPropagate(N3, 1)"
+            ],
+            micro: [
+                "共享模式允许多个读线程并发持有",
+                "队列暂时收敛为单 head 节点，后续写线程到来会再次扩展"
+            ],
+            cas: [
+                "CAS(state, 65536, 131072) => success"
+            ],
+            delta: [
+                "state: 0x00010000 -> 0x00020000",
+                "head: N2 -> N3",
+                "readHolds: 1 -> 2"
+            ],
+            next: [
+                "T4 尝试写锁时会因 sharedCount>0 失败并排队"
+            ]
+        },
+        {
+            title: "12) T4 写锁失败：独占节点 N4 入队并阻塞",
+            summary: "T4 调用 WriteLock.lock() 时 c!=0 且 w==0（只有读者无写者），tryAcquire 直接 false，随后以 EXCLUSIVE 节点入队并 park",
+            focus: "方法焦点：tryAcquire(c!=0 && w==0) + addWaiter(EXCLUSIVE)",
+            state: "0x00020000 (R=2, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=2(T2,T3)",
+            queueSummary: "N3(ws=-1) <-> N4(EXCLUSIVE, PARKED)",
+            flowActive: ["w_lock", "w_try", "w_enq", "w_park"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "读锁持有中"},
+                {name: "T3", state: "RUNNING", desc: "读锁持有中"},
+                {name: "T4", state: "PARKED", desc: "写锁排队等待", active: true}
+            ],
+            queue: [
+                {id: "N3", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "null", next: "N4", active: true},
+                {id: "N4", role: "TAIL", thread: "T4", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "N3", next: "null", active: true}
+            ],
+            chain: [
+                "WriteLock.lock() by T4",
+                "AQS.acquire(1)",
+                "Sync.tryAcquire(1) => false",
+                "addWaiter(EXCLUSIVE)",
+                "park"
+            ],
+            micro: [
+                "只要 sharedCount>0，写锁就不能获取",
+                "N4 为 EXCLUSIVE 节点，等待读者全部退出"
+            ],
+            cas: [
+                "CAS(tail, N3, N4) => success",
+                "CAS(N3.waitStatus, 0, -1) => success"
+            ],
+            delta: [
+                "tail: N3 -> N4",
+                "T4: RUNNING -> PARKED"
+            ],
+            next: [
+                "读者先后释放：前一个不会唤醒写者，最后一个会触发传播"
+            ]
+        },
+        {
+            title: "13) T2 释放读锁：读计数 2->1，不唤醒写者",
+            summary: "T2 调用 ReadLock.unlock()，tryReleaseShared 仅把 sharedCount 从 2 减到 1，返回 false",
+            focus: "方法焦点：tryReleaseShared(nextc != 0)",
+            state: "0x00010000 (R=1, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=1(T3)",
+            queueSummary: "N3(ws=-1) <-> N4(PARKED)",
+            flowActive: ["r_rel"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "已释放读锁", active: true},
+                {name: "T3", state: "RUNNING", desc: "仍持有读锁"},
+                {name: "T4", state: "PARKED", desc: "继续等待写锁"}
+            ],
+            queue: [
+                {id: "N3", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "null", next: "N4"},
+                {id: "N4", role: "TAIL", thread: "T4", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "N3", next: "null"}
+            ],
+            chain: [
+                "ReadLock.unlock() by T2",
+                "AQS.releaseShared(1)",
+                "Sync.tryReleaseShared(1) => false"
+            ],
+            micro: [
+                "只有 nextc==0 时，releaseShared 才会进入 doReleaseShared",
+                "此时仍有读者 T3，写者 N4 不能被唤醒"
+            ],
+            cas: [
+                "CAS(state, 131072, 65536) => success"
+            ],
+            delta: [
+                "state: 0x00020000 -> 0x00010000",
+                "readHolds: 2 -> 1"
+            ],
+            next: [
+                "最后一个读者 T3 释放后，N4 才有机会被唤醒"
+            ]
+        },
+        {
+            title: "14) T3 释放最后读锁：触发 doReleaseShared 唤醒 N4",
+            summary: "T3 调用 ReadLock.unlock() 把 sharedCount 降为 0，tryReleaseShared 返回 true，doReleaseShared 清理 head.waitStatus(SIGNAL->0) 并 unpark N4",
+            focus: "方法焦点：releaseShared(true) -> doReleaseShared",
+            state: "0x00000000 (R=0, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=0",
+            queueSummary: "N3(ws=0) <-> N4(READY)",
+            flowActive: ["r_rel", "w_unpark"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "已退出"},
+                {name: "T3", state: "RUNNING", desc: "释放最后读锁", active: true},
+                {name: "T4", state: "READY", desc: "被唤醒准备争写锁"}
+            ],
+            queue: [
+                {id: "N3", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "N4", active: true},
+                {id: "N4", role: "TAIL", thread: "T4", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "N3", next: "null", active: true}
+            ],
+            chain: [
+                "ReadLock.unlock() by T3",
+                "AQS.releaseShared(1)",
+                "Sync.tryReleaseShared(1) => true",
+                "doReleaseShared()",
+                "unparkSuccessor(N3)"
+            ],
+            micro: [
+                "最后一个读者离开后，读写互斥门槛解除",
+                "N4 被唤醒后还需再次 tryAcquire，唤醒与获取是两件事"
+            ],
+            cas: [
+                "CAS(state, 65536, 0) => success",
+                "CAS(N3.waitStatus, -1, 0) => success"
+            ],
+            delta: [
+                "state: 0x00010000 -> 0x00000000",
+                "T4: PARKED -> READY"
+            ],
+            next: [
+                "N4 重新竞争写锁，CAS 成功后成为新 owner"
+            ]
+        },
+        {
+            title: "15) N4 获取写锁成功：独占恢复",
+            summary: "N4 被调度后在 acquire 循环中命中 p==head，tryAcquire CAS(0->1) 成功，成为新的写锁 owner",
+            focus: "方法焦点：acquireQueued 成功收尾",
+            state: "0x00000001 (R=0, W=1)",
+            owner: "writeOwner=T4, writeHolds=1, readHolds=0",
+            queueSummary: "head=tail=N4（队列收敛）",
+            flowActive: ["w_try"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "RUNNING", desc: "写锁获取成功", active: true}
+            ],
+            queue: [
+                {id: "N4", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "null", next: "null", active: true}
+            ],
+            chain: [
+                "acquireQueued(N4, 1)",
+                "p==head && tryAcquire(1)",
+                "CAS(state, 0, 1)",
+                "setHead(N4)"
+            ],
+            micro: [
+                "此时读计数已为 0，写锁可再次进入独占态",
+                "N4 升格为 head，原 N3 脱链"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => success"
+            ],
+            delta: [
+                "state: 0x00000000 -> 0x00000001",
+                "exclusiveOwnerThread: null -> T4",
+                "head: N3 -> N4"
+            ],
+            next: [
+                "最后 T4 释放写锁，回到空闲态"
+            ]
+        },
+        {
+            title: "16) T4 WriteLock.unlock：主流程闭环",
+            summary: "T4 执行 WriteLock.unlock()，tryRelease 让 state 回到 0 并清空 owner，场景完整闭环",
+            focus: "方法焦点：tryRelease 终态",
+            state: "0x00000000 (R=0, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=0",
+            queueSummary: "仅保留空转 head=N4",
+            flowActive: ["w_unpark"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "释放写锁完成", active: true}
+            ],
+            queue: [
+                {id: "N4", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "null", next: "null"}
+            ],
+            chain: [
+                "WriteLock.unlock()",
+                "AQS.release(1)",
+                "Sync.tryRelease(1) => free=true"
+            ],
+            micro: [
+                "状态恢复到初始空闲值",
+                "这个 head 节点会被后续竞争复用，不会每次都销毁"
+            ],
+            cas: [
+                "本步无 CAS（tryRelease 使用 setState）"
+            ],
+            delta: [
+                "state: 0x00000001 -> 0x00000000",
+                "exclusiveOwnerThread: T4 -> null"
+            ],
+            next: [
+                "主流程到此闭环；下面进入两个独立语义分支：读锁重入细节、降级/升级语义"
+            ]
+        },
+        {
+            title: "17) 独立分支 A：读锁重入前置快照（写者已排队）",
+            summary: "独立场景：T2/T3 已持有读锁，队列头后是写节点 N4，那么 readerShouldBlock() 会返回 true，但已有读持有者允许重入",
+            focus: "方法焦点：readerShouldBlock + fullTryAcquireShared",
+            state: "0x00020000 (R=2, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=2(T2,T3), firstReader=T2:1, cachedHoldCounter≈T3:1",
+            queueSummary: "H(ws=-1) <-> N4(EXCLUSIVE, PARKED)",
+            flowActive: ["r_try", "w_enq"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "firstReader，readHold=1", active: true},
+                {name: "T3", state: "RUNNING", desc: "非 firstReader，readHold=1"},
+                {name: "T4", state: "PARKED", desc: "写锁排队等待"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N4", active: true},
+                {id: "N4", role: "TAIL", thread: "T4", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "(独立场景) sharedCount=2，head.next 为 EXCLUSIVE",
+                "NonfairSync.readerShouldBlock() => true",
+                "后续重入将进入 fullTryAcquireShared"
+            ],
+            micro: [
+                "readerShouldBlock=true 只限制 “新读者插队”，不应该阻塞已持有读锁的线程重入",
+                "AQS 通过 firstReader、cachedHoldCounter、ThreadLocalHoldCounter 追踪每线程读重入计数"
+            ],
+            cas: [
+                "本步无新 CAS（语义前置）"
+            ],
+            delta: [
+                "状态不变，强调内部计数结构"
+            ],
+            next: [
+                "先看 firstReader(T2) 的重入分支"
+            ]
+        },
+        {
+            title: "18) T2 读锁重入（firstReader 分支）",
+            summary: "写者在队列前部导致 readerShouldBlock=true；T2 因 firstReader==current 可在 fullTryAcquireShared 中继续重入",
+            focus: "方法焦点：fullTryAcquireShared -> firstReaderHoldCount++",
+            state: "0x00030000 (R=3, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=3, firstReader=T2:2, cachedHoldCounter≈T3:1",
+            queueSummary: "H(ws=-1) <-> N4(EXCLUSIVE, PARKED)",
+            flowActive: ["r_lock", "r_try"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "firstReader 重入成功，hold=2", active: true},
+                {name: "T3", state: "RUNNING", desc: "仍持有 1 层读锁"},
+                {name: "T4", state: "PARKED", desc: "写锁继续等待"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N4", active: true},
+                {id: "N4", role: "TAIL", thread: "T4", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "H", next: "null"}
+            ],
+            chain: [
+                "ReadLock.lock() by T2",
+                "tryAcquireShared fast-path 因 readerShouldBlock=true 不走 CAS",
+                "fullTryAcquireShared(T2)",
+                "firstReader == current -> 允许重入",
+                "CAS(state, 131072, 196608)"
+            ],
+            micro: [
+                "该分支防止 “线程自己把自己挡住”",
+                "firstReaderHoldCount: 1 -> 2，写者仍需等待全部读者释放"
+            ],
+            cas: [
+                "CAS(state, 131072, 196608) => success"
+            ],
+            delta: [
+                "state: 0x00020000 -> 0x00030000",
+                "firstReaderHoldCount: 1 -> 2"
+            ],
+            next: [
+                "再看非 firstReader 的 T3，如何经 cached/ThreadLocal 通过重入校验"
+            ]
+        },
+        {
+            title: "19) T3 读锁重入（cachedHoldCounter / ThreadLocal 分支）",
+            summary: "T3 不是 firstReader；在 readerShouldBlock=true 下，需通过 cachedHoldCounter（或回退 ThreadLocalHoldCounter）证明自己已持有读锁",
+            focus: "方法焦点：fullTryAcquireShared 的 rh.count 校验",
+            state: "0x00040000 (R=4, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=4, firstReader=T2:2, cachedHoldCounter=T3:2",
+            queueSummary: "H(ws=-1) <-> N4(EXCLUSIVE, PARKED)",
+            flowActive: ["r_lock", "r_try"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "firstReader，hold=2"},
+                {name: "T3", state: "RUNNING", desc: "non-first 重入成功，hold=2", active: true},
+                {name: "T4", state: "PARKED", desc: "写锁继续等待"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N4", active: true},
+                {id: "N4", role: "TAIL", thread: "T4", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "H", next: "null"}
+            ],
+            chain: [
+                "ReadLock.lock() by T3",
+                "fullTryAcquireShared(T3)",
+                "firstReader != current",
+                "rh = cachedHoldCounter || readHolds.get()",
+                "rh.count>0 -> CAS(state, 196608, 262144)",
+                "rh.count++，并回写 cachedHoldCounter"
+            ],
+            micro: [
+                "cachedHoldCounter 命中可避免频繁 ThreadLocal 访问",
+                "若缓存不命中，会从 readHolds(ThreadLocal) 拉取当前线程计数",
+                "只有 rh.count>0（已持有读锁）才允许在 readerShouldBlock=true 下重入"
+            ],
+            cas: [
+                "CAS(state, 196608, 262144) => success"
+            ],
+            delta: [
+                "state: 0x00030000 -> 0x00040000",
+                "T3 holdCounter: 1 -> 2（缓存更新）"
+            ],
+            next: [
+                "进入独立分支 B：展示写降级与读升级语义"
+            ]
+        },
+        {
+            title: "20) 独立分支 B：写锁降级第 1 步（先拿读锁）",
+            summary: "T1 持有写锁时再调用 ReadLock.lock() 合法且会成功，形成 W + R 并存状态（降级前置）",
+            focus: "方法焦点：tryAcquireShared(owner==current) + 写锁降级",
+            state: "0x00010001 (R=1, W=1)",
+            owner: "writeOwner=T1, writeHolds=1, readHolds=1(T1)",
+            queueSummary: "Sync Queue 空（演示降级语义）",
+            flowActive: ["w_lock", "r_lock", "r_try"],
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "持有写锁并成功获取读锁", active: true},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "(独立场景) T1 已持有 WriteLock",
+                "ReadLock.lock() by T1",
+                "tryAcquireShared: exclusiveCount!=0 但 owner==current",
+                "CAS(state, 1, 65537)"
+            ],
+            micro: [
+                "这是官方支持的降级顺序：先获取读锁，再释放写锁",
+                "若先释放写锁再去抢读锁，中间窗口可能被其它写线程插入"
+            ],
+            cas: [
+                "CAS(state, 1, 65537) => success"
+            ],
+            delta: [
+                "state: 0x00000001 -> 0x00010001",
+                "读位从 0 -> 1（写位保持 1）"
+            ],
+            next: [
+                "T1 释放写锁后仍保留读锁，完成降级"
+            ]
+        },
+        {
+            title: "21) 写锁降级第 2 步：释放写锁，仅保留读锁",
+            summary: "T1 执行 WriteLock.unlock() 后写位清零，读位保留；即从独占写模式平滑切到共享读模式",
+            focus: "方法焦点：tryRelease + downgrade 完成态",
+            state: "0x00010000 (R=1, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=1(T1)",
+            queueSummary: "可并发读；写线程仍需等待 readCount 归零",
+            flowActive: ["w_unpark"],
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "仅保留读锁（降级完成）", active: true},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "WriteLock.unlock() by T1",
+                "AQS.release(1)",
+                "Sync.tryRelease(1) => free=true"
+            ],
+            micro: [
+                "降级后仍持读锁，可继续读取已发布数据",
+                "后续读线程可并发进入；写线程必须等 sharedCount 回到 0"
+            ],
+            cas: [
+                "本步无 CAS（tryRelease 使用 setState）"
+            ],
+            delta: [
+                "state: 0x00010001 -> 0x00010000",
+                "exclusiveOwnerThread: T1 -> null"
+            ],
+            next: [
+                "最后看读->写升级：直接升级不被支持"
+            ]
+        },
+        {
+            title: "22) 读锁升级语义：read->write 不支持（阻塞式 lock() 必然自陷死锁）",
+            summary: "独立场景：T2 持有读锁后直接调用 WriteLock.lock()，tryAcquire 因 c!=0 且 w==0 失败，入 EXCLUSIVE 队列并 park；在不释放读锁的前提下会必然死锁",
+            focus: "方法焦点：tryAcquire(c!=0 && w==0) + 升级死锁闭环",
+            state: "0x00010000 (R=1, W=0)",
+            owner: "writeOwner=-, writeHolds=0, readHolds=1(T2)",
+            queueSummary: "H(ws=-1) <-> N2(EXCLUSIVE, PARKED by T2)",
+            flowActive: ["w_lock", "w_try", "w_enq", "w_park"],
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "PARKED", desc: "持读锁后请求写锁，进入升级死锁等待", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "(独立场景) ReadLock 已由 T2 持有",
+                "WriteLock.lock() by T2",
+                "Sync.tryAcquire(1) => false (sharedCount>0 && w==0)",
+                "addWaiter(EXCLUSIVE) -> park"
+            ],
+            micro: [
+                "结论：持有读锁后再走阻塞式 WriteLock.lock() 升级，必然自陷死锁",
+                "获取写锁失败后，当前线程会包装成 EXCLUSIVE 节点进入 Sync Queue；在当前 H->N2(EXCLUSIVE) 队形下，新读请求会被 readerShouldBlock 抑制",
+                "当前线程持有读锁且已 park，无法执行 ReadLock.unlock()，sharedCount 不可能降到 0",
+                "sharedCount 不归零则写锁永不可得；读不能前进、写不能前进，最终死锁",
+                "工程实践：先释放读锁，再竞争写锁（或用 tryLock 失败回退）"
+            ],
+            cas: [
+                "CAS(head, null, H) => success",
+                "CAS(tail, H, N2) => success",
+                "CAS(H.waitStatus, 0, -1) => success"
+            ],
+            delta: [
+                "head/tail: null -> H/N2",
+                "T2: RUNNING -> PARKED"
+            ],
+            next: [
+                "本页结束：主流程 + 读锁重入细节 + 降级/升级语义均已覆盖"
+            ]
+        }
+    ];
+
+    const el = {
+        prevBtn: document.getElementById("prevBtn"),
+        nextBtn: document.getElementById("nextBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        stateValue: document.getElementById("stateValue"),
+        ownerValue: document.getElementById("ownerValue"),
+        queueValue: document.getElementById("queueValue"),
+        threadLane: document.getElementById("threadLane"),
+        queueWrap: document.getElementById("queueWrap"),
+        stepTitle: document.getElementById("stepTitle"),
+        stepSummary: document.getElementById("stepSummary"),
+        focusBox: document.getElementById("focusBox"),
+        chainList: document.getElementById("chainList"),
+        microList: document.getElementById("microList"),
+        casList: document.getElementById("casList"),
+        deltaList: document.getElementById("deltaList"),
+        nextList: document.getElementById("nextList"),
+        timeline: document.getElementById("timeline"),
+        stepCounter: document.getElementById("stepCounter"),
+        stage: document.getElementById("stage"),
+        explain: document.querySelector(".explain"),
+        flowWrite: document.getElementById("flowWrite"),
+        flowRead: document.getElementById("flowRead")
+    };
+
+    let current = 0;
+    let fixedPanelHeight = null;
+
+    function stateClass(state) {
+        const s = String(state || "").toUpperCase();
+        if (s === "RUNNING") return "b-running";
+        if (s === "READY") return "b-ready";
+        if (s === "PARKED") return "b-parked";
+        if (s === "EXCEPTION") return "b-ex";
+        return "b-idle";
+    }
+
+    function wsClass(ws) {
+        if (ws > 0) return "pos";
+        if (ws < 0) return "neg";
+        return "zero";
+    }
+
+    function flashStage() {
+        el.stage.classList.remove("flash");
+        void el.stage.offsetWidth;
+        el.stage.classList.add("flash");
+        window.setTimeout(() => el.stage.classList.remove("flash"), 220);
+    }
+
+    function renderThreads(step) {
+        el.threadLane.innerHTML = "";
+        step.threads.forEach((thread) => {
+            const item = document.createElement("article");
+            item.className = `thread${thread.active ? " active" : ""}`;
+            item.innerHTML = `
+                <div class="thread-top">
+                    <strong class="thread-name">${thread.name}</strong>
+                    <span class="badge ${stateClass(thread.state)}">${thread.state}</span>
+                </div>
+                <p>${thread.desc}</p>
+            `;
+            el.threadLane.appendChild(item);
+        });
+    }
+
+    function buildBackwardChain(nodes) {
+        if (!nodes || nodes.length === 0) return "(空)";
+        return nodes.slice().reverse().map((n) => n.id).join(" -> ");
+    }
+
+    function renderQueue(step) {
+        el.queueWrap.innerHTML = "";
+        const nodes = step.queue || [];
+        if (nodes.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "queue-empty";
+            empty.textContent = "当前无节点（尚未创建 Sync Queue）";
+            el.queueWrap.appendChild(empty);
+            return;
+        }
+
+        const forward = document.createElement("div");
+        forward.className = "queue-forward";
+
+        nodes.forEach((node, index) => {
+            const card = document.createElement("article");
+            const classes = ["node"];
+            if (String(node.role || "").includes("HEAD")) classes.push("head");
+            if (node.ws > 0) classes.push("cancelled");
+            if (node.active) classes.push("active");
+            card.className = classes.join(" ");
+
+            const wsText = node.wsText !== undefined ? node.wsText : String(node.ws);
+
+            card.innerHTML = `
+                <div class="node-top">
+                    <span class="node-title">${node.id}</span>
+                    <span class="node-role">${node.role || "NODE"}</span>
+                </div>
+                <div class="node-line"><span class="label">thread:</span> ${node.thread}</div>
+                <div class="node-line"><span class="label">waitStatus:</span> <span class="ws ${wsClass(node.ws)}">${wsText}</span></div>
+                <div class="node-line"><span class="label">mode:</span> ${node.mode}</div>
+                <div class="node-line"><span class="label">prev:</span> ${node.prev}</div>
+                <div class="node-line"><span class="label">next:</span> ${node.next}</div>
+            `;
+            forward.appendChild(card);
+
+            if (index < nodes.length - 1) {
+                const arrow = document.createElement("span");
+                arrow.className = "arrow";
+                arrow.textContent = "→";
+                forward.appendChild(arrow);
+            }
+        });
+
+        el.queueWrap.appendChild(forward);
+
+        const pointer = document.createElement("div");
+        pointer.className = "pointer-panel";
+
+        const title1 = document.createElement("div");
+        title1.className = "pointer-title";
+        title1.textContent = "双向指针快照";
+        pointer.appendChild(title1);
+
+        nodes.forEach((node) => {
+            const line = document.createElement("div");
+            line.className = "pointer-line";
+            line.textContent = `${node.id}.prev=${node.prev}, ${node.id}.next=${node.next}`;
+            pointer.appendChild(line);
+        });
+
+        const title2 = document.createElement("div");
+        title2.className = "pointer-title";
+        title2.textContent = "反向遍历（tail -> head）";
+        pointer.appendChild(title2);
+
+        const backward = document.createElement("div");
+        backward.className = "pointer-line";
+        backward.textContent = buildBackwardChain(nodes);
+        pointer.appendChild(backward);
+
+        el.queueWrap.appendChild(pointer);
+    }
+
+    function renderList(target, lines, emptyText) {
+        target.innerHTML = "";
+        if (!lines || lines.length === 0) {
+            const li = document.createElement("li");
+            li.className = "empty";
+            li.textContent = emptyText;
+            target.appendChild(li);
+            return;
+        }
+
+        lines.forEach((line) => {
+            const li = document.createElement("li");
+            li.textContent = line;
+            target.appendChild(li);
+        });
+    }
+
+    function renderTimeline() {
+        el.timeline.innerHTML = "";
+        steps.forEach((step, index) => {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            const classes = ["step-chip"];
+            if (index < current) classes.push("done");
+            if (index === current) classes.push("active");
+            chip.className = classes.join(" ");
+            chip.textContent = step.title.replace(/^\d+\)\s*/, "");
+            chip.addEventListener("click", () => {
+                current = index;
+                render(true);
+            });
+            el.timeline.appendChild(chip);
+        });
+    }
+
+    function renderFlow(step) {
+        function paintRow(target, nodes) {
+            target.innerHTML = "";
+            nodes.forEach((node, index) => {
+                const box = document.createElement("div");
+                box.className = `flow-node${step.flowActive.includes(node.id) ? " active" : ""}`;
+                box.textContent = node.label;
+                target.appendChild(box);
+
+                if (index < nodes.length - 1) {
+                    const arrow = document.createElement("span");
+                    arrow.className = "flow-arrow";
+                    arrow.textContent = "→";
+                    target.appendChild(arrow);
+                }
+            });
+        }
+
+        paintRow(el.flowWrite, flowRows.write);
+        paintRow(el.flowRead, flowRows.read);
+    }
+
+    function render(animate) {
+        const step = steps[current];
+
+        el.stateValue.textContent = step.state;
+        el.ownerValue.textContent = step.owner;
+        el.queueValue.textContent = step.queueSummary;
+
+        renderFlow(step);
+        renderThreads(step);
+        renderQueue(step);
+
+        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepSummary.textContent = step.summary;
+        el.focusBox.textContent = step.focus;
+
+        renderList(el.chainList, step.chain, "暂无调用链");
+        renderList(el.microList, step.micro, "暂无细节点");
+        renderList(el.casList, step.cas, "本步无 CAS");
+        renderList(el.deltaList, step.delta, "本步无字段变化");
+        renderList(el.nextList, step.next, "流程结束");
+
+        renderTimeline();
+        el.stepCounter.textContent = `第 ${current + 1} / ${steps.length} 步`;
+
+        el.prevBtn.disabled = current === 0;
+        el.nextBtn.disabled = current === steps.length - 1;
+
+        if (fixedPanelHeight !== null) {
+            const h = `${fixedPanelHeight}px`;
+            el.stage.style.height = h;
+            el.explain.style.height = h;
+        }
+
+        if (animate) flashStage();
+    }
+
+    function computeFixedPanelHeight() {
+        const savedCurrent = current;
+
+        fixedPanelHeight = null;
+        el.stage.style.height = "auto";
+        el.explain.style.height = "auto";
+
+        let maxStage = 0;
+        let maxExplain = 0;
+
+        for (let i = 0; i < steps.length; i += 1) {
+            current = i;
+            render(false);
+            maxStage = Math.max(maxStage, el.stage.scrollHeight);
+            maxExplain = Math.max(maxExplain, el.explain.scrollHeight);
+        }
+
+        fixedPanelHeight = Math.max(maxStage, maxExplain);
+        current = savedCurrent;
+    }
+
+    function prev() {
+        if (current > 0) {
+            current -= 1;
+            render(true);
+        }
+    }
+
+    function next() {
+        if (current < steps.length - 1) {
+            current += 1;
+            render(true);
+        }
+    }
+
+    el.prevBtn.addEventListener("click", prev);
+    el.nextBtn.addEventListener("click", next);
+    el.resetBtn.addEventListener("click", () => {
+        current = 0;
+        render(true);
+    });
+
+    window.addEventListener("keydown", (event) => {
+        const target = event.target;
+        const tag = target && target.tagName ? target.tagName.toUpperCase() : "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (target && target.isContentEditable)) {
+            return;
+        }
+
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            prev();
+        } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            next();
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            current = 0;
+            render(true);
+        }
+    });
+
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(() => {
+            computeFixedPanelHeight();
+            render(false);
+        }, 120);
+    });
+
+    render(false);
+    computeFixedPanelHeight();
+    render(false);
+})();
+</script>
+</body>
+</html>

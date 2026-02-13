@@ -2258,9 +2258,9 @@ public class ThreadPoolExecutor extends AbstractExecutorService
     public void purge()
     {
         // 尝试从 workQueue 中删除所有已取消的 Future 任务
-        // 此方法可用作存储回收操作, 对功能没有其他影响
+        // 此方法可用作存储回收操作, 对功能没有其它影响
         // 已取消的任务永远不会执行, 但可能会累积在工作队列中, 直到工作线程可以主动删除它们
-        // 调用此方法会尝试立即删除它们, 但是如果存在其他线程的干扰, 此方法可能无法删除任务
+        // 调用此方法会尝试立即删除它们, 但是如果存在其它线程的干扰, 此方法可能无法删除任务
         final BlockingQueue<Runnable> q = workQueue;
         try
         {

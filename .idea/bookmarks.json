@@ -2,7 +2,7 @@
   "jdk-stu": [
     {
       "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/CyclicBarrier.java",
-      "linenumber": 88,
+      "linenumber": 89,
       "name": "循环屏障 await",
       "bookmarkType": "DEFAULT"
     },

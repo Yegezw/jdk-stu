@@ -1,0 +1,1941 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AQS 共享模式（Semaphore）全细节流程图</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --soft: #f1f5f9;
+            --line: #dbe3ef;
+            --text: #0f172a;
+            --muted: #475569;
+            --blue: #2563eb;
+            --violet: #7c3aed;
+            --green: #16a34a;
+            --orange: #ea580c;
+            --red: #dc2626;
+            --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(165deg, #eaf2ff 0%, var(--bg) 56%);
+            color: var(--text);
+            line-height: 1.56;
+        }
+
+        .app {
+            width: min(1380px, calc(100vw - 20px));
+            margin: 12px auto 26px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .app > *,
+        .layout > *,
+        .stage > * {
+            min-width: 0;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            box-shadow: var(--shadow);
+        }
+
+        .hero {
+            padding: 14px 16px;
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-size: clamp(22px, 2.6vw, 31px);
+            line-height: 1.26;
+        }
+
+        .hero p {
+            margin: 7px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .hero .tip {
+            margin-top: 8px;
+            padding: 7px 10px;
+            background: var(--soft);
+            border: 1px solid #d6e2f6;
+            border-radius: 9px;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        .controls {
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .model-pill {
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .btn {
+            border: 1px solid #c8d5ea;
+            background: #ffffff;
+            color: #1e293b;
+            border-radius: 9px;
+            padding: 7px 11px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.18s ease;
+        }
+
+        .btn:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .btn:focus-visible,
+        .step-chip:focus-visible {
+            outline: 2px solid var(--blue);
+            outline-offset: 2px;
+        }
+
+        .btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .control-note {
+            margin-left: auto;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1.45fr 1fr;
+            gap: 10px;
+            align-items: start;
+        }
+
+        .stage {
+            padding: 10px;
+            display: grid;
+            grid-template-rows: auto 196px minmax(0, 1fr);
+            gap: 8px;
+            transition: box-shadow 0.18s ease, border-color 0.18s ease;
+            align-content: start;
+        }
+
+        .stage.flash {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13), var(--shadow);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 190px 230px minmax(0, 1fr);
+            gap: 7px;
+        }
+
+        .status {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #f8fbff;
+            padding: 7px;
+            height: 72px;
+            overflow: hidden;
+        }
+
+        .status span {
+            display: block;
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .status strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 13px;
+            line-height: 1.36;
+            color: #0f172a;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .status-state strong,
+        .status-return strong {
+            font-family: Menlo, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+            min-width: 5ch;
+            text-align: left;
+        }
+
+        .lane {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fcfdff;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .lane h3 {
+            margin: 0 0 7px;
+            font-size: 13px;
+            color: #334155;
+        }
+
+        .lane-threads {
+            min-height: 196px;
+        }
+
+        .lane-queue {
+            min-height: 560px;
+        }
+
+        .threads {
+            display: grid;
+            gap: 7px;
+            grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+            grid-auto-rows: 76px;
+            align-content: start;
+            flex: 1;
+        }
+
+        .thread {
+            border: 1px solid #d9e3f2;
+            border-radius: 9px;
+            background: #ffffff;
+            padding: 7px;
+            height: 76px;
+            transition: 0.18s ease;
+        }
+
+        .thread.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .thread-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .thread-name {
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .badge {
+            border-radius: 999px;
+            padding: 2px 7px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+
+        .b-running {
+            background: #dcfce7;
+            color: #065f46;
+        }
+
+        .b-ready {
+            background: #dbeafe;
+            color: #1e3a8a;
+        }
+
+        .b-parked {
+            background: #ffedd5;
+            color: #9a3412;
+        }
+
+        .b-idle {
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+        .b-ex {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .thread p {
+            margin: 6px 0 0;
+            font-size: 11px;
+            color: #475569;
+        }
+
+        .queue-wrap {
+            display: grid;
+            grid-template-rows: auto auto;
+            gap: 6px;
+            align-content: start;
+        }
+
+        .queue-empty {
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 7px 9px;
+            font-size: 12px;
+            color: #64748b;
+            background: #f8fafc;
+            min-height: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        .queue-forward {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            align-items: center;
+            align-content: flex-start;
+            min-height: 0;
+        }
+
+        .arrow {
+            color: #94a3b8;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1;
+            user-select: none;
+        }
+
+        .node {
+            width: 196px;
+            border: 1px solid #d2dceb;
+            border-radius: 10px;
+            background: #ffffff;
+            padding: 7px;
+            transition: 0.18s ease;
+        }
+
+        .node.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .node.head {
+            border-color: #a78bfa;
+            background: #f8f5ff;
+        }
+
+        .node.cancelled {
+            border-color: #fca5a5;
+            background: #fff1f2;
+        }
+
+        .node-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+
+        .node-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .node-role {
+            font-size: 10px;
+            border-radius: 999px;
+            padding: 1px 6px;
+            background: #e2e8f0;
+            color: #334155;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .node-line {
+            font-size: 11px;
+            color: #334155;
+            margin: 1px 0;
+        }
+
+        .node-line .label {
+            color: #64748b;
+        }
+
+        .ws {
+            font-weight: 700;
+        }
+
+        .ws.neg {
+            color: #0f766e;
+        }
+
+        .ws.zero {
+            color: #1d4ed8;
+        }
+
+        .ws.pos {
+            color: #dc2626;
+        }
+
+        .pointer-panel {
+            border: 1px solid #dbe3ef;
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 7px 7px 10px;
+            display: grid;
+            gap: 5px;
+            min-height: 132px;
+            align-content: start;
+        }
+
+        .pointer-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+        }
+
+        .pointer-line {
+            font-family: Menlo, Consolas, monospace;
+            font-size: 11px;
+            color: #1f2937;
+            line-height: 1.45;
+        }
+
+        .explain {
+            padding: 10px;
+            display: grid;
+            gap: 8px;
+            align-content: start;
+        }
+
+        .explain h2 {
+            margin: 0;
+            font-size: 19px;
+            line-height: 1.34;
+        }
+
+        .explain .summary {
+            margin: 0;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .focus-box {
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border-radius: 9px;
+            padding: 7px 8px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .detail {
+            border: 1px solid #dbe3ef;
+            border-radius: 9px;
+            background: #ffffff;
+            padding: 7px;
+        }
+
+        .detail h3 {
+            margin: 0 0 6px;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        .detail ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 5px;
+        }
+
+        .detail li {
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            background: #f8fafc;
+            padding: 5px 7px;
+            font-size: 12px;
+            color: #334155;
+            line-height: 1.45;
+        }
+
+        .detail li.empty {
+            color: #64748b;
+            border-style: dashed;
+        }
+
+        .timeline-card {
+            padding: 10px;
+        }
+
+        .timeline-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 7px;
+        }
+
+        .timeline-head h3 {
+            margin: 0;
+            font-size: 13px;
+            color: #334155;
+        }
+
+        .timeline-head span {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .timeline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            min-height: 74px;
+        }
+
+        .step-chip {
+            border: 1px solid #cbd5e1;
+            border-radius: 9px;
+            background: #ffffff;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 6px 8px;
+            cursor: pointer;
+            transition: 0.18s ease;
+        }
+
+        .step-chip:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .step-chip.done {
+            border-color: #86efac;
+            background: #f0fdf4;
+            color: #166534;
+        }
+
+        .step-chip.active {
+            border-color: #1d4ed8;
+            background: linear-gradient(120deg, #2563eb, #1d4ed8);
+            color: #ffffff;
+        }
+
+        .note {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        @media (max-width: 1120px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .stage {
+                grid-template-rows: auto auto auto;
+            }
+
+            .lane-threads,
+            .lane-queue {
+                min-height: 0;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .app {
+                width: calc(100% - 10px);
+                margin-top: 6px;
+            }
+
+            .status-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .node {
+                width: 100%;
+            }
+
+            .queue-forward {
+                display: grid;
+                gap: 6px;
+            }
+
+            .arrow {
+                transform: rotate(90deg);
+                justify-self: center;
+            }
+
+            .control-note {
+                margin-left: 0;
+                width: 100%;
+            }
+
+            .model-pill {
+                width: 100%;
+                white-space: normal;
+                border-radius: 10px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <section class="hero card">
+        <h1>AQS 共享模式全细节流程图（以 Semaphore 为实现）</h1>
+        <p>覆盖 tryAcquireShared 返回值语义、共享入队/park、doReleaseShared、setHeadAndPropagate、以及 PROPAGATE 的并发兜底分支</p>
+        <p class="tip">Sync Queue 明确按双向链表展示：每个节点都显示 <strong>prev</strong> 和 <strong>next</strong>；共享节点 mode=SHARED</p>
+    </section>
+
+    <section class="controls card" aria-label="流程控制">
+        <button id="prevBtn" class="btn" type="button">⏮ 上一步</button>
+        <button id="nextBtn" class="btn" type="button">⏭ 下一步</button>
+        <button id="resetBtn" class="btn" type="button">↺ 重置</button>
+        <div class="model-pill">演示模型：Semaphore.NonfairSync + AQS 共享</div>
+        <div class="control-note">快捷键：← 上一步，→ 下一步，Home 重置（场景：初始 permits=2）</div>
+    </section>
+
+    <section class="layout">
+        <article id="stage" class="stage card" aria-live="off">
+            <div class="status-grid">
+                <div class="status status-state">
+                    <span>state（可用 permits）</span>
+                    <strong id="stateValue">-</strong>
+                </div>
+                <div class="status status-return">
+                    <span>tryAcquireShared 返回值 r</span>
+                    <strong id="ownerValue">-</strong>
+                </div>
+                <div class="status">
+                    <span>队列摘要</span>
+                    <strong id="queueValue">-</strong>
+                </div>
+            </div>
+
+            <section class="lane lane-threads">
+                <h3>线程状态</h3>
+                <div id="threadLane" class="threads"></div>
+            </section>
+
+            <section class="lane lane-queue">
+                <h3>Sync Queue（双向链表，prev/next）</h3>
+                <div id="queueWrap" class="queue-wrap"></div>
+            </section>
+        </article>
+
+        <aside class="explain card">
+            <h2 id="stepTitle">-</h2>
+            <p id="stepSummary" class="summary">-</p>
+            <div id="focusBox" class="focus-box">-</div>
+
+            <section class="detail">
+                <h3>调用链（当前步骤）</h3>
+                <ul id="chainList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>方法内细节点（逐条）</h3>
+                <ul id="microList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>CAS / 原子操作</h3>
+                <ul id="casList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>关键字段变化</h3>
+                <ul id="deltaList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>为何进入下一步</h3>
+                <ul id="nextList"></ul>
+            </section>
+
+            <div class="note">说明：这是教学化 “逐指令” 视图，专注 NonfairSync 主路径 + 共享传播关键分支（含 PROPAGATE）</div>
+        </aside>
+    </section>
+
+    <section class="timeline-card card">
+        <div class="timeline-head">
+            <h3>完整时间线（可点击跳转）</h3>
+            <span id="stepCounter">-</span>
+        </div>
+        <div id="timeline" class="timeline"></div>
+    </section>
+
+    <section class="timeline-card card">
+        <div class="timeline-head">
+            <h3>扩展：CountDownLatch 如何使用 AQS（不参与本页流程）</h3>
+        </div>
+        <section class="detail">
+            <ul>
+                <li>同步状态含义：AQS.state 表示剩余计数，初始值为 count</li>
+                <li>await() 路径：调用 acquireSharedInterruptibly(1)，tryAcquireShared 在 state==0 时返回 1，否则返回 -1 并进入共享队列等待</li>
+                <li>countDown() 路径：调用 releaseShared(1)，tryReleaseShared 通过 CAS 把 state 递减；仅当 state 递减到 0 时返回 true，触发 doReleaseShared 传播唤醒等待线程</li>
+                <li>一次性语义：计数归零后闸门永久打开，CountDownLatch 不能重置</li>
+            </ul>
+        </section>
+    </section>
+</div>
+
+<script>
+(() => {
+    const steps = [
+        {
+            title: "1) 初始化 Semaphore(2)：共享 state = permits",
+            summary: "构造 NonfairSync 时直接 setState(2)，AQS 的 state 在 Semaphore 里表示可用许可数，不表示 owner",
+            focus: "方法焦点：Semaphore(int) + Sync.setState(permits)",
+            state: "2",
+            owner: "-",
+            queueSummary: "Sync Queue 空",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "new Semaphore(2)",
+                "new Semaphore.NonfairSync(2)",
+                "Sync.setState(2)"
+            ],
+            micro: [
+                "Semaphore 通过 AQS.state 维护 permits",
+                "与 ReentrantLock 不同：这里没有 exclusiveOwnerThread",
+                "初始队列为空，head/tail 均为 null"
+            ],
+            cas: [
+                "构造阶段直接 setState(2)，无 CAS"
+            ],
+            delta: [
+                "state: 0 -> 2（初始化语义）",
+                "head/tail: null / null"
+            ],
+            next: [
+                "T1 先调用 acquire(2)，展示共享 fast path 成功"
+            ]
+        },
+        {
+            title: "2) T1 acquire(2)：fast path 成功",
+            summary: "acquireSharedInterruptibly(2) 首先 tryAcquireShared(2)，CAS(state, 2, 0) 成功并返回 r=0，不入队",
+            focus: "方法焦点：tryAcquireShared -> nonfairTryAcquireShared",
+            state: "0",
+            owner: "r = 0",
+            queueSummary: "仍无等待节点",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "一次拿走 2 个 permits", active: true},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "Semaphore.acquire(2) by T1",
+                "AQS.acquireSharedInterruptibly(2)",
+                "NonfairSync.tryAcquireShared(2)",
+                "CAS(state, 2, 0)"
+            ],
+            micro: [
+                "available=2，remaining=available-acquires=0",
+                "remaining>=0，CAS 更新 state 成功",
+                "返回 r=0：获取成功但无剩余许可",
+                "模板方法直接返回，不进入 doAcquireSharedInterruptibly"
+            ],
+            cas: [
+                "CAS(state, 2, 0) => success"
+            ],
+            delta: [
+                "state: 2 -> 0",
+                "队列仍为空"
+            ],
+            next: [
+                "T2 acquire(1) 时会得到 r<0，进入共享慢路径"
+            ]
+        },
+        {
+            title: "3) T2 acquire(1)：tryAcquireShared 返回 -1",
+            summary: "state=0 时 remaining=-1，tryAcquireShared 直接返回负值；AQS 转入 doAcquireSharedInterruptibly",
+            focus: "方法焦点：acquireSharedInterruptibly + doAcquireSharedInterruptibly",
+            state: "0",
+            owner: "r = -1",
+            queueSummary: "准备入队",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "仍占用 2 个许可"},
+                {name: "T2", state: "RUNNING", desc: "共享获取失败，进入慢路径", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "Semaphore.acquire() by T2",
+                "acquireSharedInterruptibly(1)",
+                "tryAcquireShared(1) => -1",
+                "doAcquireSharedInterruptibly(1)"
+            ],
+            micro: [
+                "available=0，remaining=-1",
+                "remaining<0 直接返回，不做 CAS",
+                "返回负值触发 AQS 共享入队逻辑"
+            ],
+            cas: [
+                "本步无 CAS（remaining<0 直接返回）"
+            ],
+            delta: [
+                "state 不变（仍为 0）",
+                "T2 进入 AQS 共享排队流程"
+            ],
+            next: [
+                "T2 先 addWaiter(SHARED)，队列为空时会走 enq 创建虚拟头"
+            ]
+        },
+        {
+            title: "4) T2 addWaiter/enq：创建共享队列 H <-> N2",
+            summary: "addWaiter(SHARED) 在空队列下转 enq：先 CAS(head, null, H)，再 CAS(tail, H, N2)",
+            focus: "方法焦点：Queue.addWaiter(SHARED) + Queue.enq(node)",
+            state: "0",
+            owner: "-",
+            queueSummary: "H <-> N2(SHARED)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "占用许可中"},
+                {name: "T2", state: "RUNNING", desc: "成为共享尾节点 N2", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireSharedInterruptibly(1)",
+                "Queue.addWaiter(Node.SHARED)",
+                "Queue.enq(N2)",
+                "返回 N2，进入 loop#1"
+            ],
+            micro: [
+                "空队列下 addWaiter 快速尾插失败，转 enq 自旋",
+                "CAS(head, null, H) 成功后，tail 指向 H",
+                "再完成 node.prev=H + CAS(tail, H, N2) + H.next=N2",
+                "N2 的 nextWaiter=SHARED，标记共享节点"
+            ],
+            cas: [
+                "CAS(head, null, H) => success",
+                "CAS(tail, H, N2) => success"
+            ],
+            delta: [
+                "head: null -> H",
+                "tail: null -> N2",
+                "N2.prev: null -> H",
+                "H.next: null -> N2"
+            ],
+            next: [
+                "进入 doAcquireSharedInterruptibly 循环，先建立 SIGNAL 协议"
+            ]
+        },
+        {
+            title: "5) N2 循环#1：设置前驱 H.waitStatus=SIGNAL",
+            summary: "N2 前驱是 head，但 tryAcquireShared 仍返回 -1；shouldParkAfterFailedAcquire 将 H.waitStatus: 0 -> -1",
+            focus: "方法焦点：shouldParkAfterFailedAcquire(H, N2)",
+            state: "0",
+            owner: "r = -1",
+            queueSummary: "H(ws=-1) <-> N2",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "占用许可中"},
+                {name: "T2", state: "RUNNING", desc: "第一轮自旋，不 park", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireSharedInterruptibly(1) loop#1 (N2)",
+                "p = node.predecessor() => H",
+                "tryAcquireShared(1) => -1",
+                "shouldParkAfterFailedAcquire(H, N2)"
+            ],
+            micro: [
+                "pred.ws 当前为 0，命中 ws==0 分支",
+                "CAS(pred.ws, 0, SIGNAL) 成功",
+                "返回 false：本轮不 park，要求再自旋一次",
+                "语义是让前驱承诺：释放时负责唤醒后继"
+            ],
+            cas: [
+                "CAS(H.waitStatus, 0, -1) => success"
+            ],
+            delta: [
+                "H.waitStatus: 0 -> -1",
+                "T2 仍为 RUNNING"
+            ],
+            next: [
+                "第二轮看到 pred.ws==SIGNAL 后，T2 才会真正 park"
+            ]
+        },
+        {
+            title: "6) N2 循环#2：满足条件后 park",
+            summary: "shouldParkAfterFailedAcquire 返回 true，T2 执行 parkAndCheckInterrupt 进入阻塞",
+            focus: "方法焦点：parkAndCheckInterrupt",
+            state: "0",
+            owner: "-",
+            queueSummary: "H(ws=-1) <-> N2(parked)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "占用许可中"},
+                {name: "T2", state: "PARKED", desc: "等待唤醒", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2"},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireSharedInterruptibly(1) loop#2 (N2)",
+                "shouldParkAfterFailedAcquire(H, N2) => true",
+                "parkAndCheckInterrupt()"
+            ],
+            micro: [
+                "前驱 ws 已是 SIGNAL，阻塞条件成立",
+                "LockSupport.park(this) 挂起当前线程",
+                "等待后续 releaseShared 或传播唤醒"
+            ],
+            cas: [
+                "本步无新 CAS（关键是 park）"
+            ],
+            delta: [
+                "T2: RUNNING -> PARKED",
+                "队列结构不变"
+            ],
+            next: [
+                "再引入 T3 竞争，形成两个共享等待节点，便于展示传播"
+            ]
+        },
+        {
+            title: "7) T3 acquire(1) 失败并快速尾插 N3",
+            summary: "T3 fast path 失败后进入 doAcquireSharedInterruptibly；队列非空，addWaiter(SHARED) 直接 CAS tail 成功",
+            focus: "方法焦点：addWaiter(SHARED) fast path",
+            state: "0",
+            owner: "r = -1",
+            queueSummary: "H <-> N2 <-> N3",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "占用许可中"},
+                {name: "T2", state: "PARKED", desc: "等待唤醒"},
+                {name: "T3", state: "RUNNING", desc: "入队为 N3", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2"},
+                {id: "N2", role: "NODE", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "H", next: "N3"},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "Semaphore.acquire() by T3",
+                "tryAcquireShared(1) => -1",
+                "doAcquireSharedInterruptibly(1)",
+                "addWaiter(SHARED) fast path"
+            ],
+            micro: [
+                "读取 tail=N2（非空）",
+                "先写 N3.prev=N2",
+                "CAS(tail, N2, N3) 成功后再写 N2.next=N3",
+                "共享队列扩展为三节点"
+            ],
+            cas: [
+                "CAS(tail, N2, N3) => success"
+            ],
+            delta: [
+                "tail: N2 -> N3",
+                "N3.prev: null -> N2",
+                "N2.next: null -> N3"
+            ],
+            next: [
+                "N3 将先把前驱 N2 的 waitStatus 置 SIGNAL，再进入 park"
+            ]
+        },
+        {
+            title: "8) N3 循环#1：设置 N2.waitStatus=SIGNAL",
+            summary: "N3 前驱是 N2（不是 head），tryAcquireShared 不会成功；shouldParkAfterFailedAcquire 将 N2.ws: 0 -> -1",
+            focus: "方法焦点：shouldParkAfterFailedAcquire(N2, N3)",
+            state: "0",
+            owner: "r = -1",
+            queueSummary: "H(-1) <-> N2(-1) <-> N3",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "占用许可中"},
+                {name: "T2", state: "PARKED", desc: "等待唤醒"},
+                {name: "T3", state: "RUNNING", desc: "第一轮自旋", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2"},
+                {id: "N2", role: "NODE", thread: "T2", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "H", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireSharedInterruptibly(1) loop#1 (N3)",
+                "p = node.predecessor() => N2",
+                "shouldParkAfterFailedAcquire(N2, N3)",
+                "CAS(N2.ws, 0, SIGNAL)"
+            ],
+            micro: [
+                "N3 还没有排到 head 后面，不能尝试成功获取",
+                "先把前驱 N2 设为 SIGNAL",
+                "返回 false：让调用方再循环一轮"
+            ],
+            cas: [
+                "CAS(N2.waitStatus, 0, -1) => success"
+            ],
+            delta: [
+                "N2.waitStatus: 0 -> -1",
+                "N3 仍 RUNNING"
+            ],
+            next: [
+                "下一轮 pred.ws==SIGNAL，N3 将 park"
+            ]
+        },
+        {
+            title: "9) N3 循环#2：进入 park",
+            summary: "N3 满足阻塞协议后 park，形成 H(-1) -> N2(-1) -> N3(0) 的典型共享等待队列",
+            focus: "方法焦点：parkAndCheckInterrupt",
+            state: "0",
+            owner: "-",
+            queueSummary: "H(-1) <-> N2(-1) <-> N3(parked)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "占用许可中"},
+                {name: "T2", state: "PARKED", desc: "等待唤醒"},
+                {name: "T3", state: "PARKED", desc: "等待共享传播", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2"},
+                {id: "N2", role: "NODE", thread: "T2", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "H", next: "N3"},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireSharedInterruptibly(1) loop#2 (N3)",
+                "shouldParkAfterFailedAcquire(N2, N3) => true",
+                "parkAndCheckInterrupt()"
+            ],
+            micro: [
+                "N3 进入阻塞，等待 releaseShared 或共享传播",
+                "此时两个等待节点都在共享模式（SHARED）"
+            ],
+            cas: [
+                "本步无 CAS"
+            ],
+            delta: [
+                "T3: RUNNING -> PARKED"
+            ],
+            next: [
+                "T1 将分两次 release，依次触发 unpark 与 PROPAGATE 分支"
+            ]
+        },
+        {
+            title: "10) T1 第一次 release(1)：SIGNAL 路径唤醒 N2",
+            summary: "tryReleaseShared 中 CAS(state, 0, 1) 成功后进入 doReleaseShared；head(H).ws=-1，先复位到 0 再 unparkSuccessor(H)",
+            focus: "方法焦点：releaseShared + doReleaseShared(ws==SIGNAL)",
+            state: "1",
+            owner: "-",
+            queueSummary: "H(ws=0) <-> N2(READY) <-> N3(PARKED)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "执行第 1 次 release", active: true},
+                {name: "T2", state: "READY", desc: "被唤醒，等待 CPU", active: true},
+                {name: "T3", state: "PARKED", desc: "仍阻塞"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "NODE", thread: "T2", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "H", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null"}
+            ],
+            chain: [
+                "Semaphore.release() by T1",
+                "AQS.releaseShared(1)",
+                "Sync.tryReleaseShared(1) => true",
+                "doReleaseShared() -> unparkSuccessor(H)",
+                "尾部检查：h == head，doReleaseShared() 返回"
+            ],
+            micro: [
+                "Semaphore 的 tryReleaseShared 永远返回 true",
+                "ws==-1 分支：CAS(H.ws, -1, 0) 后唤醒后继 N2",
+                "N2 由 PARKED 进入 READY",
+                "本轮头节点没有易主（h==head），for 循环结束"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => success",
+                "CAS(H.waitStatus, -1, 0) => success"
+            ],
+            delta: [
+                "state: 0 -> 1",
+                "H.waitStatus: -1 -> 0",
+                "T2: PARKED -> READY"
+            ],
+            next: [
+                "在 N2 还没来得及 setHead 前，T1 再次 release，进入 ws==0 -> PROPAGATE 窗口"
+            ]
+        },
+        {
+            title: "11) T1 第二次 release(1)：ws==0，写入 PROPAGATE",
+            summary: "tryReleaseShared 中 CAS(state, 1, 2) 成功后进入 doReleaseShared；此时 head 仍是旧 H 且 ws=0，CAS(H.ws, 0, -3) 记录 PROPAGATE",
+            focus: "方法焦点：doReleaseShared(ws==0 -> PROPAGATE)",
+            state: "2",
+            owner: "-",
+            queueSummary: "H(ws=-3 PROPAGATE) <-> N2(READY) <-> N3(PARKED)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "执行第 2 次 release", active: true},
+                {name: "T2", state: "READY", desc: "尚未 setHead", active: true},
+                {name: "T3", state: "PARKED", desc: "等待后续传播"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -3, wsText: "-3 (PROPAGATE)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "NODE", thread: "T2", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "H", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null"}
+            ],
+            chain: [
+                "Semaphore.release() by T1",
+                "releaseShared(1)",
+                "tryReleaseShared(1) => true",
+                "doReleaseShared(): ws==0 分支"
+            ],
+            micro: [
+                "CAS(state, 1, 2) 成功，许可继续增加",
+                "这里不是 “唤醒失败”，而是 ws==0 窗口下先记录传播意图",
+                "CAS(head.ws, 0, PROPAGATE) 作为并发兜底标记",
+                "接下来要看 doReleaseShared 尾部检查时 head 是否已易主"
+            ],
+            cas: [
+                "CAS(state, 1, 2) => success",
+                "CAS(H.waitStatus, 0, -3) => success"
+            ],
+            delta: [
+                "state: 1 -> 2",
+                "H.waitStatus: 0 -> -3(PROPAGATE)"
+            ],
+            next: [
+                "N2 可能先被调度并 setHead，导致 T1 在 doReleaseShared 尾部检查中继续 for 循环"
+            ]
+        },
+        {
+            title: "12) 并发窗口 A：N2 被调度，r=1 并 setHead(N2)",
+            summary: "N2 被唤醒后在 doAcquireSharedInterruptibly 中继续执行，tryAcquireShared 返回 r=1；随后 setHeadAndPropagate(N2, 1)",
+            focus: "方法焦点：doAcquireSharedInterruptibly + setHeadAndPropagate",
+            state: "1",
+            owner: "r = 1",
+            queueSummary: "N2(head, ws=-1) <-> N3(tail, ws=0)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "仍在 doReleaseShared for 循环中", active: true},
+                {name: "T2", state: "RUNNING", desc: "获取许可并成为新 head", active: true},
+                {name: "T3", state: "PARKED", desc: "仍阻塞"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "null", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null"}
+            ],
+            chain: [
+                "doAcquireSharedInterruptibly(1) 被唤醒后继续 (N2)",
+                "p==head && tryAcquireShared(1) => r=1",
+                "setHeadAndPropagate(N2, 1)",
+                "doReleaseShared() by T2"
+            ],
+            micro: [
+                "CAS(state, 2, 1) 后返回 r=1（仍有剩余许可）",
+                "setHead 后 N2.thread 清空，旧 H 脱链",
+                "N2 进入 doReleaseShared 准备传播唤醒 N3"
+            ],
+            cas: [
+                "CAS(state, 2, 1) => success"
+            ],
+            delta: [
+                "state: 2 -> 1",
+                "head: H -> N2",
+                "N2.thread: T2 -> null"
+            ],
+            next: [
+                "T1 上一轮 doReleaseShared 尾部会发现 h(H) != head(N2)，因此不会退出"
+            ]
+        },
+        {
+            title: "13) 并发窗口 B：T1 尾部检查发现 head 已易主",
+            summary: "T1 在 doReleaseShared 尾部执行 if (h == head) 时，观察到 h=H 而当前 head=N2，于是继续 for 循环",
+            focus: "方法焦点：doReleaseShared 的退出条件",
+            state: "1",
+            owner: "-",
+            queueSummary: "N2(head, ws=-1) <-> N3(tail, ws=0)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "检测到 head 易主，继续循环", active: true},
+                {name: "T2", state: "RUNNING", desc: "并发执行 doReleaseShared", active: true},
+                {name: "T3", state: "PARKED", desc: "仍等待唤醒"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "null", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null"}
+            ],
+            chain: [
+                "doReleaseShared() by T1 (continuing)",
+                "if (h == head) break",
+                "h=H, head=N2 -> 继续循环"
+            ],
+            micro: [
+                "这一步体现 doReleaseShared 的关键语义：head 易主就继续循环",
+                "因此 T1 有机会与 T2 在新 head(N2) 上并发做传播"
+            ],
+            cas: [
+                "本步无新 CAS（关键是退出条件判定）"
+            ],
+            delta: [
+                "T1 保持 RUNNING，继续 doReleaseShared for 循环"
+            ],
+            next: [
+                "接下来 T1 与 T2 可能同时读取到 h=N2，竞争 CAS(N2.ws, -1, 0)"
+            ]
+        },
+        {
+            title: "14) 并发窗口 C：T1/T2 同时传播，竞争 CAS(N2.ws)",
+            summary: "T1 与 T2 并发执行 doReleaseShared，均可能尝试把 N2.waitStatus 从 SIGNAL 改到 0 并唤醒 N3",
+            focus: "方法焦点：doReleaseShared 并发 CAS 竞争",
+            state: "1",
+            owner: "-",
+            queueSummary: "N2(head, ws=-1) <-> N3(tail, ws=0)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "竞争传播 CAS", active: true},
+                {name: "T2", state: "RUNNING", desc: "竞争传播 CAS", active: true},
+                {name: "T3", state: "PARKED", desc: "等待被唤醒"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "null", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "doReleaseShared() by T1",
+                "doReleaseShared() by T2",
+                "CAS(N2.waitStatus, -1, 0)（并发竞争）"
+            ],
+            micro: [
+                "两个线程都可能看到 ws==-1",
+                "但 CAS 保证只有一个线程能把 ws:-1 改到 0",
+                "CAS 成功者才会执行 unparkSuccessor(N2)"
+            ],
+            cas: [
+                "CAS(N2.waitStatus, -1, 0) => 一方成功，一方失败"
+            ],
+            delta: [
+                "N2.waitStatus 最终会落到 0"
+            ],
+            next: [
+                "CAS 成功的一方唤醒 N3；失败的一方会重试并在 head 稳定后退出"
+            ]
+        },
+        {
+            title: "15) 并发结果：仅一个线程真正唤醒 N3",
+            summary: "竞争结果收敛后，N3 被唤醒进入 READY；另一个线程因 CAS 失败或状态变化进入下一轮检查",
+            focus: "方法焦点：unparkSuccessor + for 循环收敛",
+            state: "1",
+            owner: "-",
+            queueSummary: "N2(head, ws=0) <-> N3(READY)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "继续检查是否退出"},
+                {name: "T2", state: "RUNNING", desc: "继续检查是否退出"},
+                {name: "T3", state: "READY", desc: "已被唤醒", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "获胜线程执行 CAS(N2.waitStatus, -1, 0)",
+                "unparkSuccessor(N2)",
+                "失败线程在 doReleaseShared() 中重试"
+            ],
+            micro: [
+                "被唤醒的是节点 N3 对应线程，不是直接 “转移许可”",
+                "N3 醒来后仍需再次执行 tryAcquireShared 才能真正获取",
+                "这保证了唤醒与获取语义解耦"
+            ],
+            cas: [
+                "CAS(N2.waitStatus, -1, 0) => success（获胜线程）"
+            ],
+            delta: [
+                "T3: PARKED -> READY",
+                "N2.waitStatus: -1 -> 0"
+            ],
+            next: [
+                "当 head 不再易主时，T1/T2 的 doReleaseShared 才会各自退出"
+            ]
+        },
+        {
+            title: "16) doReleaseShared 退出条件：head 未易主才 break",
+            summary: "T1/T2 各自在 for 尾部执行 if (h == head)；只有观察到本轮快照 head 未被易主时才退出",
+            focus: "方法焦点：doReleaseShared 的 break 条件",
+            state: "1",
+            owner: "-",
+            queueSummary: "N2(head, ws=0) <-> N3(READY)",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "doReleaseShared 退出"},
+                {name: "T2", state: "RUNNING", desc: "准备返回业务代码", active: true},
+                {name: "T3", state: "READY", desc: "等待 CPU 执行获取"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "doReleaseShared() by T1/T2",
+                "if (h == head) break",
+                "head 稳定 -> 返回"
+            ],
+            micro: [
+                "doReleaseShared 的退出条件：头节点没有被易主才退出",
+                "该条件保证了并发 acquire/release 下传播不会半途丢失"
+            ],
+            cas: [
+                "本步无新 CAS（关键是稳定性判定）"
+            ],
+            delta: [
+                "T1: RUNNING -> IDLE"
+            ],
+            next: [
+                "N3 被调度后将再次 tryAcquireShared，成功后成为新 head"
+            ]
+        },
+        {
+            title: "17) N3 被唤醒后获取成功：r=0 并成为 head",
+            summary: "N3 被唤醒后在 doAcquireSharedInterruptibly 中继续执行，tryAcquireShared 返回 r=0；setHeadAndPropagate 后队列收敛为单 head",
+            focus: "方法焦点：doAcquireSharedInterruptibly 成功收尾",
+            state: "0",
+            owner: "r = 0",
+            queueSummary: "head=tail=N3（旧 N2 脱链）",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "持有 1 个 permit"},
+                {name: "T3", state: "RUNNING", desc: "持有 1 个 permit 并成新 head", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N3", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireSharedInterruptibly(1) 被唤醒后继续 (N3)",
+                "p==head && tryAcquireShared(1) => r=0",
+                "setHeadAndPropagate(N3, 0)",
+                "p.next = null"
+            ],
+            micro: [
+                "CAS(state, 1, 0) 成功，剩余许可清零",
+                "r=0 表示本线程成功但无剩余许可",
+                "此时队列已无后继等待节点，传播结束",
+                "N3 设为 head 后 thread/prev 清空"
+            ],
+            cas: [
+                "CAS(state, 1, 0) => success"
+            ],
+            delta: [
+                "state: 1 -> 0",
+                "head: N2 -> N3",
+                "N3.thread: T3 -> null"
+            ],
+            next: [
+                "接下来由已获取许可的线程归还 permits（release）"
+            ]
+        },
+        {
+            title: "18) T2 release(1)：无等待者，仅 permits++",
+            summary: "T2 归还 1 个许可，tryReleaseShared 仍是 CAS + true；由于 head==tail，无可唤醒后继",
+            focus: "方法焦点：tryReleaseShared（永远 true）",
+            state: "1",
+            owner: "-",
+            queueSummary: "仅 head 节点 N3（无等待者）",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "归还 permit", active: true},
+                {name: "T3", state: "RUNNING", desc: "仍持有 1 个 permit"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N3", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "null", active: true}
+            ],
+            chain: [
+                "Semaphore.release() by T2",
+                "releaseShared(1)",
+                "tryReleaseShared(1) => true",
+                "doReleaseShared(): h==tail，退出"
+            ],
+            micro: [
+                "CAS(state, 0, 1) 成功",
+                "Semaphore.release 不校验 “释放者是否曾获取过 permit”",
+                "队列没有等待者，不触发 unpark"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => success"
+            ],
+            delta: [
+                "state: 0 -> 1",
+                "队列结构不变"
+            ],
+            next: [
+                "T3 归还最后一个业务 permit，回到初始容量 2"
+            ]
+        },
+        {
+            title: "19) T3 release(1)：permits 回到 2",
+            summary: "T3 release 后 state=2，完成本轮 acquire/release 闭环；共享队列保持单 head 空转态",
+            focus: "方法焦点：releaseShared 收尾分支",
+            state: "2",
+            owner: "-",
+            queueSummary: "仅 head 节点 N3，permits 回到 2",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "已释放"},
+                {name: "T3", state: "RUNNING", desc: "释放并退出", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N3", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "null", active: true}
+            ],
+            chain: [
+                "Semaphore.release() by T3",
+                "releaseShared(1)",
+                "tryReleaseShared(1) => true",
+                "doReleaseShared(): no-op"
+            ],
+            micro: [
+                "CAS(state, 1, 2) 成功",
+                "共享模式下 state 只反映许可计数",
+                "主流程（排队/阻塞/传播/唤醒）到此闭环"
+            ],
+            cas: [
+                "CAS(state, 1, 2) => success"
+            ],
+            delta: [
+                "state: 1 -> 2",
+                "队列仍为单 head（N3）"
+            ],
+            next: [
+                "下面补一个独立小场景，专门展示 “r=0 + PROPAGATE” 为什么必要"
+            ]
+        },
+        {
+            title: "20) 专项场景初始化：r=0 临界窗口（独立分支）",
+            summary: "独立小场景：T3 首次 release 已唤醒 N1(T1)，T1 已经 tryAcquireShared 成功并得到 r=0，但尚未来得及 setHeadAndPropagate",
+            focus: "方法焦点：setHeadAndPropagate 之前的并发空窗",
+            state: "0",
+            owner: "r = 0（N1/T1）",
+            queueSummary: "H(ws=0) <-> N1(T1, ws=-1) <-> N2(T2, ws=0)",
+            threads: [
+                {name: "T1", state: "READY", desc: "N1: 已拿到 r=0，尚未 setHead", active: true},
+                {name: "T2", state: "PARKED", desc: "N2: 仍在等待"},
+                {name: "T3", state: "IDLE", desc: "已完成第 1 次 release"},
+                {name: "T4", state: "RUNNING", desc: "准备第 2 次 release", active: true}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "N1", active: true},
+                {id: "N1", role: "NODE", thread: "T1", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "H", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N1", next: "null"}
+            ],
+            chain: [
+                "(独立场景) doAcquireSharedInterruptibly by N1/T1",
+                "tryAcquireShared(1) => r=0",
+                "setHeadAndPropagate(N1, 0) 尚未执行"
+            ],
+            micro: [
+                "这是 PROPAGATE 设计要解决的关键时间窗",
+                "如果此时再有 release，到底如何确保后继 N2 不丢唤醒？"
+            ],
+            cas: [
+                "本步无新 CAS（强调时序窗口）"
+            ],
+            delta: [
+                "state 已被 N1 消耗到 0",
+                "head 仍是旧 H"
+            ],
+            next: [
+                "T4 执行第 2 次 release，命中 ws==0 分支并写入 PROPAGATE"
+            ]
+        },
+        {
+            title: "21) 独立分支：T4 release(1) 命中 ws==0 -> PROPAGATE",
+            summary: "T4 调用 releaseShared(1) 后，doReleaseShared 读到 old head(H).ws==0，执行 CAS(H.ws, 0, -3)",
+            focus: "方法焦点：doReleaseShared(ws==0 -> PROPAGATE)",
+            state: "1",
+            owner: "-",
+            queueSummary: "H(ws=-3) <-> N1(ws=-1) <-> N2(ws=0)",
+            threads: [
+                {name: "T1", state: "READY", desc: "仍未 setHead"},
+                {name: "T2", state: "PARKED", desc: "仍等待唤醒"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "RUNNING", desc: "写入 PROPAGATE", active: true}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -3, wsText: "-3 (PROPAGATE)", mode: "DUMMY", prev: "null", next: "N1", active: true},
+                {id: "N1", role: "NODE", thread: "T1", ws: -1, wsText: "-1 (SIGNAL)", mode: "SHARED", prev: "H", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N1", next: "null"}
+            ],
+            chain: [
+                "Semaphore.release() by T4",
+                "releaseShared(1)",
+                "doReleaseShared(): ws==0 分支"
+            ],
+            micro: [
+                "CAS(state, 0, 1) 成功",
+                "CAS(H.ws, 0, PROPAGATE) 成功",
+                "该标记将让后续 N1.setHeadAndPropagate(0) 仍执行共享传播"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => success",
+                "CAS(H.waitStatus, 0, -3) => success"
+            ],
+            delta: [
+                "state: 0 -> 1",
+                "H.waitStatus: 0 -> -3(PROPAGATE)"
+            ],
+            next: [
+                "N1/T1 继续执行 setHeadAndPropagate(N1, 0)，尽管 propagate=0 仍会传播"
+            ]
+        },
+        {
+            title: "22) 独立分支：N1 setHeadAndPropagate(0) 仍触发传播",
+            summary: "N1/T1 恢复执行 setHeadAndPropagate(N1, 0)；虽然 propagate=0，但 oldHead(H).waitStatus<0，条件成立并调用 doReleaseShared",
+            focus: "方法焦点：setHeadAndPropagate 的 h.waitStatus<0 条件",
+            state: "1",
+            owner: "r = 0（N1/T1）",
+            queueSummary: "N1(head, ws=0) <-> N2(READY)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "N1: setHeadAndPropagate(0)", active: true},
+                {name: "T2", state: "READY", desc: "N2: 被传播唤醒", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "release 已完成"}
+            ],
+            queue: [
+                {id: "N1", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "N1", next: "null", active: true}
+            ],
+            chain: [
+                "setHeadAndPropagate(N1, 0)",
+                "propagate=0 but oldHead.waitStatus<0",
+                "doReleaseShared() -> unparkSuccessor(N1)"
+            ],
+            micro: [
+                "这一步正是 PROPAGATE 设计存在的意义",
+                "若没有 H.ws=-3，propagate=0 可能导致传播中断",
+                "现在 N2 能被成功唤醒，链路不断"
+            ],
+            cas: [
+                "CAS(N1.waitStatus, -1, 0) => success"
+            ],
+            delta: [
+                "head: H -> N1",
+                "T2: PARKED -> READY"
+            ],
+            next: [
+                "N2 被调度后可继续获取，验证 r=0 场景传播成功"
+            ]
+        },
+        {
+            title: "23) 独立分支收尾：N2 被唤醒后成功获取",
+            summary: "N2/T2 被传播唤醒后尝试获取，CAS(state, 1, 0) 成功并成为新 head；证明 r=0 场景未断链",
+            focus: "方法焦点：传播后继节点最终可达",
+            state: "0",
+            owner: "r = 0（N2/T2）",
+            queueSummary: "head=tail=N2（独立分支收敛）",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "N1: 已完成传播"},
+                {name: "T2", state: "RUNNING", desc: "N2: 获取成功并成新 head", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "null", active: true}
+            ],
+            chain: [
+                "doAcquireSharedInterruptibly(1) 被唤醒后继续 (N2/T2)",
+                "tryAcquireShared(1) => r=0",
+                "setHeadAndPropagate(N2, 0)"
+            ],
+            micro: [
+                "N2 成功获取说明共享传播没有丢失",
+                "这正是 ws==0 时写 PROPAGATE 的直接收益"
+            ],
+            cas: [
+                "CAS(state, 1, 0) => success"
+            ],
+            delta: [
+                "state: 1 -> 0",
+                "head: N1 -> N2"
+            ],
+            next: [
+                "最后补充 Semaphore 的语义差异：未 acquire 的线程也可 release"
+            ]
+        },
+        {
+            title: "24) 语义分支：T4 未 acquire 也可以 release()",
+            summary: "Semaphore 不维护 owner；T4 即便未获取过 permit，也可合法 release，使 state 继续增加",
+            focus: "方法焦点：tryReleaseShared 无 owner 校验",
+            state: "1",
+            owner: "-",
+            queueSummary: "队列不变，permits 继续增加",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "RUNNING", desc: "直接 release 合法", active: true}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "SHARED", prev: "null", next: "null"}
+            ],
+            chain: [
+                "Semaphore.release() by T4",
+                "releaseShared(1)",
+                "tryReleaseShared(1) => true",
+                "doReleaseShared()"
+            ],
+            micro: [
+                "tryReleaseShared 仅做 state 加法 + CAS",
+                "没有 ReentrantLock.tryRelease 那种 owner 线程校验",
+                "只有在 permits 整型溢出时才会抛 Error"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => success"
+            ],
+            delta: [
+                "state: 0 -> 1",
+                "不抛 IllegalMonitorStateException"
+            ],
+            next: [
+                "主流程结束：共享获取、共享阻塞、共享传播、PROPAGATE 并发兜底、语义差异均已覆盖"
+            ]
+        }
+    ];
+
+    const el = {
+        prevBtn: document.getElementById("prevBtn"),
+        nextBtn: document.getElementById("nextBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        stateValue: document.getElementById("stateValue"),
+        ownerValue: document.getElementById("ownerValue"),
+        queueValue: document.getElementById("queueValue"),
+        threadLane: document.getElementById("threadLane"),
+        queueWrap: document.getElementById("queueWrap"),
+        stepTitle: document.getElementById("stepTitle"),
+        stepSummary: document.getElementById("stepSummary"),
+        focusBox: document.getElementById("focusBox"),
+        chainList: document.getElementById("chainList"),
+        microList: document.getElementById("microList"),
+        casList: document.getElementById("casList"),
+        deltaList: document.getElementById("deltaList"),
+        nextList: document.getElementById("nextList"),
+        timeline: document.getElementById("timeline"),
+        stepCounter: document.getElementById("stepCounter"),
+        stage: document.getElementById("stage"),
+        explain: document.querySelector(".explain")
+    };
+
+    let current = 0;
+    let fixedPanelHeight = null;
+
+    function stateClass(state) {
+        const s = String(state || "").toUpperCase();
+        if (s === "RUNNING") return "b-running";
+        if (s === "READY") return "b-ready";
+        if (s === "PARKED") return "b-parked";
+        if (s === "EXCEPTION") return "b-ex";
+        return "b-idle";
+    }
+
+    function wsClass(ws) {
+        if (ws > 0) return "pos";
+        if (ws < 0) return "neg";
+        return "zero";
+    }
+
+    function flashStage() {
+        el.stage.classList.remove("flash");
+        void el.stage.offsetWidth;
+        el.stage.classList.add("flash");
+        window.setTimeout(() => el.stage.classList.remove("flash"), 220);
+    }
+
+    function renderThreads(step) {
+        el.threadLane.innerHTML = "";
+        step.threads.forEach((thread) => {
+            const item = document.createElement("article");
+            item.className = `thread${thread.active ? " active" : ""}`;
+            item.innerHTML = `
+                <div class="thread-top">
+                    <strong class="thread-name">${thread.name}</strong>
+                    <span class="badge ${stateClass(thread.state)}">${thread.state}</span>
+                </div>
+                <p>${thread.desc}</p>
+            `;
+            el.threadLane.appendChild(item);
+        });
+    }
+
+    function buildBackwardChain(nodes) {
+        if (!nodes || nodes.length === 0) return "(空)";
+        return nodes.slice().reverse().map((n) => n.id).join(" -> ");
+    }
+
+    function renderQueue(step) {
+        el.queueWrap.innerHTML = "";
+        const nodes = step.queue || [];
+        if (nodes.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "queue-empty";
+            empty.textContent = "当前无节点（尚未创建 Sync Queue）";
+            el.queueWrap.appendChild(empty);
+            return;
+        }
+
+        const forward = document.createElement("div");
+        forward.className = "queue-forward";
+
+        nodes.forEach((node, index) => {
+            const card = document.createElement("article");
+            const classes = ["node"];
+            if (String(node.role || "").includes("HEAD")) classes.push("head");
+            if (node.ws > 0) classes.push("cancelled");
+            if (node.active) classes.push("active");
+            card.className = classes.join(" ");
+
+            const wsText = node.wsText !== undefined ? node.wsText : String(node.ws);
+
+            card.innerHTML = `
+                <div class="node-top">
+                    <span class="node-title">${node.id}</span>
+                    <span class="node-role">${node.role || "NODE"}</span>
+                </div>
+                <div class="node-line"><span class="label">thread:</span> ${node.thread}</div>
+                <div class="node-line"><span class="label">waitStatus:</span> <span class="ws ${wsClass(node.ws)}">${wsText}</span></div>
+                <div class="node-line"><span class="label">mode:</span> ${node.mode}</div>
+                <div class="node-line"><span class="label">prev:</span> ${node.prev}</div>
+                <div class="node-line"><span class="label">next:</span> ${node.next}</div>
+            `;
+            forward.appendChild(card);
+
+            if (index < nodes.length - 1) {
+                const arrow = document.createElement("span");
+                arrow.className = "arrow";
+                arrow.textContent = "→";
+                forward.appendChild(arrow);
+            }
+        });
+
+        el.queueWrap.appendChild(forward);
+
+        const pointer = document.createElement("div");
+        pointer.className = "pointer-panel";
+
+        const title1 = document.createElement("div");
+        title1.className = "pointer-title";
+        title1.textContent = "双向指针快照";
+        pointer.appendChild(title1);
+
+        nodes.forEach((node) => {
+            const line = document.createElement("div");
+            line.className = "pointer-line";
+            line.textContent = `${node.id}.prev=${node.prev}, ${node.id}.next=${node.next}`;
+            pointer.appendChild(line);
+        });
+
+        const title2 = document.createElement("div");
+        title2.className = "pointer-title";
+        title2.textContent = "反向遍历（tail -> head）";
+        pointer.appendChild(title2);
+
+        const backward = document.createElement("div");
+        backward.className = "pointer-line";
+        backward.textContent = buildBackwardChain(nodes);
+        pointer.appendChild(backward);
+
+        el.queueWrap.appendChild(pointer);
+    }
+
+    function renderList(target, lines, emptyText) {
+        target.innerHTML = "";
+        if (!lines || lines.length === 0) {
+            const li = document.createElement("li");
+            li.className = "empty";
+            li.textContent = emptyText;
+            target.appendChild(li);
+            return;
+        }
+
+        lines.forEach((line) => {
+            const li = document.createElement("li");
+            li.textContent = line;
+            target.appendChild(li);
+        });
+    }
+
+    function renderTimeline() {
+        el.timeline.innerHTML = "";
+        steps.forEach((step, index) => {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            const classes = ["step-chip"];
+            if (index < current) classes.push("done");
+            if (index === current) classes.push("active");
+            chip.className = classes.join(" ");
+            chip.textContent = step.title.replace(/^\d+\)\s*/, "");
+            chip.addEventListener("click", () => {
+                current = index;
+                render(true);
+            });
+            el.timeline.appendChild(chip);
+        });
+    }
+
+    function render(animate) {
+        const step = steps[current];
+
+        el.stateValue.textContent = step.state;
+        el.ownerValue.textContent = step.owner;
+        el.queueValue.textContent = step.queueSummary;
+
+        renderThreads(step);
+        renderQueue(step);
+
+        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepSummary.textContent = step.summary;
+        el.focusBox.textContent = step.focus;
+
+        renderList(el.chainList, step.chain, "暂无调用链");
+        renderList(el.microList, step.micro, "暂无细节点");
+        renderList(el.casList, step.cas, "本步无 CAS");
+        renderList(el.deltaList, step.delta, "本步无字段变化");
+        renderList(el.nextList, step.next, "流程结束");
+
+        renderTimeline();
+        el.stepCounter.textContent = `第 ${current + 1} / ${steps.length} 步`;
+
+        el.prevBtn.disabled = current === 0;
+        el.nextBtn.disabled = current === steps.length - 1;
+
+        if (fixedPanelHeight !== null) {
+            const h = `${fixedPanelHeight}px`;
+            el.stage.style.height = h;
+            el.explain.style.height = h;
+        }
+
+        if (animate) flashStage();
+    }
+
+    function computeFixedPanelHeight() {
+        const savedCurrent = current;
+
+        fixedPanelHeight = null;
+        el.stage.style.height = "auto";
+        el.explain.style.height = "auto";
+
+        let maxStage = 0;
+        let maxExplain = 0;
+
+        for (let i = 0; i < steps.length; i += 1) {
+            current = i;
+            render(false);
+            maxStage = Math.max(maxStage, el.stage.scrollHeight);
+            maxExplain = Math.max(maxExplain, el.explain.scrollHeight);
+        }
+
+        fixedPanelHeight = Math.max(maxStage, maxExplain);
+        current = savedCurrent;
+    }
+
+    function prev() {
+        if (current > 0) {
+            current -= 1;
+            render(true);
+        }
+    }
+
+    function next() {
+        if (current < steps.length - 1) {
+            current += 1;
+            render(true);
+        }
+    }
+
+    el.prevBtn.addEventListener("click", prev);
+    el.nextBtn.addEventListener("click", next);
+    el.resetBtn.addEventListener("click", () => {
+        current = 0;
+        render(true);
+    });
+
+    window.addEventListener("keydown", (event) => {
+        const target = event.target;
+        const tag = target && target.tagName ? target.tagName.toUpperCase() : "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (target && target.isContentEditable)) {
+            return;
+        }
+
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            prev();
+        } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            next();
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            current = 0;
+            render(true);
+        }
+    });
+
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(() => {
+            computeFixedPanelHeight();
+            render(false);
+        }, 120);
+    });
+
+    render(false);
+    computeFixedPanelHeight();
+    render(false);
+})();
+</script>
+</body>
+</html>

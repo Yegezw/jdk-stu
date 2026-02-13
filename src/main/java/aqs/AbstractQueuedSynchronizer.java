@@ -340,7 +340,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
         @SuppressWarnings("all")
         final boolean transferAfterCancelledWait(Node node) {
             // node 线程没被 signal(), 那么 node 为 CONDITION
-            // 这里 CAS 置 0, enq(node) 将 node 搬到 sync queue 中，返回 true
+            // 这里 CAS 置 0, enq(node) 将 node 搬到 sync queue 中, 返回 true
             // 注意: 这里并没有断开 node.nextWaiter(因为中断导致的搬迁)
             if (queue.compareAndSetWaitStatus(node, Node.CONDITION, 0)) {
                 queue.enq(node);
@@ -998,6 +998,7 @@ public abstract class AbstractQueuedSynchronizer extends AbstractOwnableSynchron
      */
     private final boolean parkAndCheckInterrupt() {
         LockSupport.park(this); // unpark() OR 中断
+        // System.out.println(Thread.currentThread().getName() + " 被唤醒"); // 便于调试
         return Thread.interrupted();   // 会清除中断状态
     }
 

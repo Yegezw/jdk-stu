@@ -337,5 +337,4 @@ public class ThreadLocal<T>
     {
         throw new UnsupportedOperationException();
     }
-
 }

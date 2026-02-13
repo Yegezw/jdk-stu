@@ -1,0 +1,1627 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AQS 独占模式（ReentrantLock）全细节流程图</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --soft: #f1f5f9;
+            --line: #dbe3ef;
+            --text: #0f172a;
+            --muted: #475569;
+            --blue: #2563eb;
+            --violet: #7c3aed;
+            --green: #16a34a;
+            --orange: #ea580c;
+            --red: #dc2626;
+            --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(165deg, #eaf2ff 0%, var(--bg) 56%);
+            color: var(--text);
+            line-height: 1.56;
+        }
+
+        .app {
+            width: min(1360px, calc(100vw - 20px));
+            margin: 12px auto 26px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .app > *,
+        .layout > *,
+        .stage > * {
+            min-width: 0;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            box-shadow: var(--shadow);
+        }
+
+        .hero {
+            padding: 14px 16px;
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-size: clamp(22px, 2.6vw, 31px);
+            line-height: 1.26;
+        }
+
+        .hero p {
+            margin: 7px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .hero .tip {
+            margin-top: 8px;
+            padding: 7px 10px;
+            background: var(--soft);
+            border: 1px solid #d6e2f6;
+            border-radius: 9px;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        .controls {
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .model-pill {
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .btn {
+            border: 1px solid #c8d5ea;
+            background: #ffffff;
+            color: #1e293b;
+            border-radius: 9px;
+            padding: 7px 11px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.18s ease;
+        }
+
+        .btn:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .btn:focus-visible,
+        .step-chip:focus-visible {
+            outline: 2px solid var(--blue);
+            outline-offset: 2px;
+        }
+
+        .btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .control-note {
+            margin-left: auto;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1.45fr 1fr;
+            gap: 10px;
+            align-items: start;
+        }
+
+        .stage {
+            padding: 10px;
+            display: grid;
+            grid-template-rows: auto 196px minmax(0, 1fr);
+            gap: 8px;
+            transition: box-shadow 0.18s ease, border-color 0.18s ease;
+            align-content: start;
+        }
+
+        .stage.flash {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13), var(--shadow);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 180px 190px minmax(0, 1fr);
+            gap: 7px;
+        }
+
+        .status {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #f8fbff;
+            padding: 7px;
+            height: 72px;
+            overflow: hidden;
+        }
+
+        .status span {
+            display: block;
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .status strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 13px;
+            line-height: 1.36;
+            color: #0f172a;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .status-state strong {
+            font-family: Menlo, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+            min-width: 5ch;
+            text-align: left;
+        }
+
+        .lane {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fcfdff;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .lane h3 {
+            margin: 0 0 7px;
+            font-size: 13px;
+            color: #334155;
+        }
+
+        .lane-threads {
+            min-height: 196px;
+        }
+
+        .lane-queue {
+            min-height: 560px;
+        }
+
+        .threads {
+            display: grid;
+            gap: 7px;
+            grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+            grid-auto-rows: 76px;
+            align-content: start;
+            flex: 1;
+        }
+
+        .thread {
+            border: 1px solid #d9e3f2;
+            border-radius: 9px;
+            background: #ffffff;
+            padding: 7px;
+            height: 76px;
+            transition: 0.18s ease;
+        }
+
+        .thread.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .thread-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .thread-name {
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .badge {
+            border-radius: 999px;
+            padding: 2px 7px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+
+        .b-running {
+            background: #dcfce7;
+            color: #065f46;
+        }
+
+        .b-ready {
+            background: #dbeafe;
+            color: #1e3a8a;
+        }
+
+        .b-parked {
+            background: #ffedd5;
+            color: #9a3412;
+        }
+
+        .b-idle {
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+        .b-ex {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .thread p {
+            margin: 6px 0 0;
+            font-size: 11px;
+            color: #475569;
+        }
+
+        .queue-wrap {
+            display: grid;
+            grid-template-rows: auto auto;
+            gap: 6px;
+            align-content: start;
+        }
+
+        .queue-empty {
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 7px 9px;
+            font-size: 12px;
+            color: #64748b;
+            background: #f8fafc;
+            min-height: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        .queue-forward {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            align-items: center;
+            align-content: flex-start;
+            min-height: 0;
+        }
+
+        .arrow {
+            color: #94a3b8;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1;
+            user-select: none;
+        }
+
+        .node {
+            width: 188px;
+            border: 1px solid #d2dceb;
+            border-radius: 10px;
+            background: #ffffff;
+            padding: 7px;
+            transition: 0.18s ease;
+        }
+
+        .node.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .node.head {
+            border-color: #a78bfa;
+            background: #f8f5ff;
+        }
+
+        .node.cancelled {
+            border-color: #fca5a5;
+            background: #fff1f2;
+        }
+
+        .node-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+
+        .node-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .node-role {
+            font-size: 10px;
+            border-radius: 999px;
+            padding: 1px 6px;
+            background: #e2e8f0;
+            color: #334155;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .node-line {
+            font-size: 11px;
+            color: #334155;
+            margin: 1px 0;
+        }
+
+        .node-line .label {
+            color: #64748b;
+        }
+
+        .ws {
+            font-weight: 700;
+        }
+
+        .ws.neg {
+            color: #0f766e;
+        }
+
+        .ws.zero {
+            color: #1d4ed8;
+        }
+
+        .ws.pos {
+            color: #dc2626;
+        }
+
+        .pointer-panel {
+            border: 1px solid #dbe3ef;
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 7px 7px 10px;
+            display: grid;
+            gap: 5px;
+            min-height: 132px;
+            align-content: start;
+        }
+
+        .pointer-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+        }
+
+        .pointer-line {
+            font-family: Menlo, Consolas, monospace;
+            font-size: 11px;
+            color: #1f2937;
+            line-height: 1.45;
+        }
+
+        .explain {
+            padding: 10px;
+            display: grid;
+            gap: 8px;
+            align-content: start;
+        }
+
+        .explain h2 {
+            margin: 0;
+            font-size: 19px;
+            line-height: 1.34;
+        }
+
+        .explain .summary {
+            margin: 0;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .focus-box {
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border-radius: 9px;
+            padding: 7px 8px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .detail {
+            border: 1px solid #dbe3ef;
+            border-radius: 9px;
+            background: #ffffff;
+            padding: 7px;
+        }
+
+        .detail h3 {
+            margin: 0 0 6px;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        .detail ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 5px;
+        }
+
+        .detail li {
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            background: #f8fafc;
+            padding: 5px 7px;
+            font-size: 12px;
+            color: #334155;
+            line-height: 1.45;
+        }
+
+        .detail li.empty {
+            color: #64748b;
+            border-style: dashed;
+        }
+
+        .timeline-card {
+            padding: 10px;
+        }
+
+        .timeline-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 7px;
+        }
+
+        .timeline-head h3 {
+            margin: 0;
+            font-size: 13px;
+            color: #334155;
+        }
+
+        .timeline-head span {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .timeline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            min-height: 74px;
+        }
+
+        .step-chip {
+            border: 1px solid #cbd5e1;
+            border-radius: 9px;
+            background: #ffffff;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 6px 8px;
+            cursor: pointer;
+            transition: 0.18s ease;
+        }
+
+        .step-chip:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .step-chip.done {
+            border-color: #86efac;
+            background: #f0fdf4;
+            color: #166534;
+        }
+
+        .step-chip.active {
+            border-color: #1d4ed8;
+            background: linear-gradient(120deg, #2563eb, #1d4ed8);
+            color: #ffffff;
+        }
+
+        .note {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        @media (max-width: 1120px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .stage {
+                grid-template-rows: auto auto auto;
+            }
+
+            .lane-threads,
+            .lane-queue {
+                min-height: 0;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .app {
+                width: calc(100% - 10px);
+                margin-top: 6px;
+            }
+
+            .status-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .node {
+                width: 100%;
+            }
+
+            .queue-forward {
+                display: grid;
+                gap: 6px;
+            }
+
+            .arrow {
+                transform: rotate(90deg);
+                justify-self: center;
+            }
+
+            .control-note {
+                margin-left: 0;
+                width: 100%;
+            }
+
+            .model-pill {
+                width: 100%;
+                white-space: normal;
+                border-radius: 10px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <section class="hero card">
+        <h1>AQS 独占模式全细节流程图（以 ReentrantLock 为实现）</h1>
+        <p>单线程持锁、可重入、竞争入队、park/unpark、setHead、最终释放，以及非法 unlock 分支都按 “方法内细节点” 拆开展示</p>
+        <p class="tip">Sync Queue 明确按双向链表展示：每个节点都显示 <strong>prev</strong> 和 <strong>next</strong> 两个指针</p>
+    </section>
+
+    <section class="controls card" aria-label="流程控制">
+        <button id="prevBtn" class="btn" type="button">⏮ 上一步</button>
+        <button id="nextBtn" class="btn" type="button">⏭ 下一步</button>
+        <button id="resetBtn" class="btn" type="button">↺ 重置</button>
+        <div class="model-pill">演示模型：ReentrantLock.NonfairSync + AQS 独占</div>
+        <div class="control-note">快捷键：← 上一步，→ 下一步，Home 重置</div>
+    </section>
+
+    <section class="layout">
+        <article id="stage" class="stage card" aria-live="off">
+            <div class="status-grid">
+                <div class="status status-state">
+                    <span>state（重入计数）</span>
+                    <strong id="stateValue">-</strong>
+                </div>
+                <div class="status">
+                    <span>独占持有者</span>
+                    <strong id="ownerValue">-</strong>
+                </div>
+                <div class="status">
+                    <span>队列摘要</span>
+                    <strong id="queueValue">-</strong>
+                </div>
+            </div>
+
+            <section class="lane lane-threads">
+                <h3>线程状态</h3>
+                <div id="threadLane" class="threads"></div>
+            </section>
+
+            <section class="lane lane-queue">
+                <h3>Sync Queue（双向链表，prev/next）</h3>
+                <div id="queueWrap" class="queue-wrap"></div>
+            </section>
+        </article>
+
+        <aside class="explain card">
+            <h2 id="stepTitle">-</h2>
+            <p id="stepSummary" class="summary">-</p>
+            <div id="focusBox" class="focus-box">-</div>
+
+            <section class="detail">
+                <h3>调用链（当前步骤）</h3>
+                <ul id="chainList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>方法内细节点（逐条）</h3>
+                <ul id="microList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>CAS / 原子操作</h3>
+                <ul id="casList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>关键字段变化</h3>
+                <ul id="deltaList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>为何进入下一步</h3>
+                <ul id="nextList"></ul>
+            </section>
+
+            <div class="note">说明：这是教学化 “逐指令” 视图，专注 NonfairSync 主路径和关键分支</div>
+        </aside>
+    </section>
+
+    <section class="timeline-card card">
+        <div class="timeline-head">
+            <h3>完整时间线（可点击跳转）</h3>
+            <span id="stepCounter">-</span>
+        </div>
+        <div id="timeline" class="timeline"></div>
+    </section>
+</div>
+
+<script>
+(() => {
+    const steps = [
+        {
+            title: "1) T1 第一次 lock()：fast path 直接成功",
+            summary: "ReentrantLock.lock() 进入 NonfairSync.lock()，CAS(state, 0->1) 成功，直接设置 owner=T1，不走队列",
+            focus: "方法焦点：NonfairSync.lock + compareAndSetState + setExclusiveOwnerThread",
+            state: "1",
+            owner: "T1",
+            queueSummary: "Sync Queue 空",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "调用 lock() 并拿到锁", active: true},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "ReentrantLock.lock()",
+                "NonfairSync.lock()",
+                "compareAndSetState(0, 1)",
+                "setExclusiveOwnerThread(T1)"
+            ],
+            micro: [
+                "读取 volatile state，当前为 0",
+                "直接尝试 CAS 抢占，无需先看队列",
+                "CAS 成功后 owner=当前线程 T1",
+                "方法返回，不进入 acquire(1) 慢路径"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => success"
+            ],
+            delta: [
+                "state: 0 -> 1",
+                "exclusiveOwnerThread: null -> T1"
+            ],
+            next: [
+                "下一步展示可重入：同线程再次 lock() 时不会排队，而是 state++"
+            ]
+        },
+        {
+            title: "2) T1 第二次 lock()：可重入路径",
+            summary: "T1 再次 lock，NonfairSync.lock 的 CAS(0->1) 失败，转 acquire(1)->tryAcquire->nonfairTryAcquire，可重入成功",
+            focus: "方法焦点：acquire(1) + nonfairTryAcquire(重入分支)",
+            state: "2",
+            owner: "T1",
+            queueSummary: "仍无等待节点",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "同线程重入成功", active: true},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "ReentrantLock.lock()",
+                "NonfairSync.lock(): CAS(0, 1) failed",
+                "AbstractQueuedSynchronizer.acquire(1)",
+                "Sync.tryAcquire(1) -> nonfairTryAcquire(1)"
+            ],
+            micro: [
+                "c = getState() = 1，不满足 c==0 分支",
+                "检查 current == owner，命中可重入条件",
+                "nextc = c + acquires = 2",
+                "setState(nextc) 直接写入（owner 不变）"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => failed（state 已是 1）"
+            ],
+            delta: [
+                "state: 1 -> 2",
+                "exclusiveOwnerThread 仍为 T1"
+            ],
+            next: [
+                "下一步引入竞争线程 T2，进入真正的 AQS 入队流程"
+            ]
+        },
+        {
+            title: "3) T2 调用 lock()：fast path 失败，转慢路径",
+            summary: "T2 进入 NonfairSync.lock，CAS(0->1) 失败后调用 acquire(1)",
+            focus: "方法焦点：NonfairSync.lock -> acquire(1)",
+            state: "2",
+            owner: "T1",
+            queueSummary: "准备入队",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "仍持有锁"},
+                {name: "T2", state: "RUNNING", desc: "进入 acquire 慢路径", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [],
+            chain: [
+                "ReentrantLock.lock() by T2",
+                "NonfairSync.lock()",
+                "compareAndSetState(0, 1) failed",
+                "AbstractQueuedSynchronizer.acquire(1)"
+            ],
+            micro: [
+                "当前 state=2，说明锁已被 T1 持有且重入一次",
+                "非公平锁仍先 CAS 抢一次，这是设计上的吞吐优化",
+                "抢占失败后才进入 AQS 模板方法 acquire"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => failed"
+            ],
+            delta: [
+                "state/owner 不变",
+                "T2 从用户代码进入 AQS 争锁流程"
+            ],
+            next: [
+                "acquire 内 tryAcquire 再失败后将 addWaiter + enq"
+            ]
+        },
+        {
+            title: "4) T2 addWaiter/enq：创建双向链表",
+            summary: "tryAcquire 失败后，T2 创建 EXCLUSIVE 节点 N2，队列为空时 enq 先创建虚拟 head(H)，再把 N2 挂到 tail",
+            focus: "方法焦点：addWaiter(EXCLUSIVE) + enq(node)",
+            state: "2",
+            owner: "T1",
+            queueSummary: "H <-> N2",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "持锁中"},
+                {name: "T2", state: "RUNNING", desc: "已成为队尾节点 N2", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "acquire(1)",
+                "tryAcquire(1) -> false",
+                "Queue.addWaiter(EXCLUSIVE)",
+                "Queue.enq(N2)"
+            ],
+            micro: [
+                "addWaiter 先尝试快速尾插；队列为空时会失败",
+                "enq 自旋：CAS(head, null, new Node()) 创建虚拟头",
+                "再执行 node.prev=t；CAS(tail, t, node)；t.next=node",
+                "至此双向链：H.next=N2 且 N2.prev=H"
+            ],
+            cas: [
+                "CAS(head, null, H) => success",
+                "CAS(tail, H, N2) => success"
+            ],
+            delta: [
+                "head: null -> H",
+                "tail: null -> N2",
+                "N2.prev: null -> H",
+                "H.next: null -> N2"
+            ],
+            next: [
+                "进入 acquireQueued 自旋，开始设置 SIGNAL 协议"
+            ]
+        },
+        {
+            title: "5) acquireQueued#1：先设置前驱 SIGNAL",
+            summary: "N2 在 acquireQueued 中命中 p==head 但 tryAcquire 失败；shouldParkAfterFailedAcquire 把 pred(H).waitStatus:0->-1(SIGNAL)",
+            focus: "方法焦点：acquireQueued + shouldParkAfterFailedAcquire",
+            state: "2",
+            owner: "T1",
+            queueSummary: "H(ws=-1) <-> N2",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "持锁中"},
+                {name: "T2", state: "RUNNING", desc: "第一次自旋，未 park", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "acquireQueued(N2, 1)",
+                "p = node.predecessor() => H",
+                "tryAcquire(1) => false",
+                "shouldParkAfterFailedAcquire(H, N2)"
+            ],
+            micro: [
+                "ws = pred.waitStatus = 0",
+                "命中 ws==0 分支，CAS(pred.ws, 0, SIGNAL)",
+                "返回 false：本轮不 park，要求调用方再自旋一次",
+                "目的：先让前驱承诺 “释放时会唤醒后继”"
+            ],
+            cas: [
+                "CAS(H.waitStatus, 0, -1) => success"
+            ],
+            delta: [
+                "H.waitStatus: 0 -> -1(SIGNAL)",
+                "N2 仍处于运行态（尚未阻塞）"
+            ],
+            next: [
+                "第二轮自旋将看到 pred.ws==SIGNAL，从而真正 park"
+            ]
+        },
+        {
+            title: "6) acquireQueued#2：T2 进入 park",
+            summary: "第二轮 shouldParkAfterFailedAcquire 看到 pred.ws==SIGNAL 并返回 true；T2 调用 parkAndCheckInterrupt 进入阻塞",
+            focus: "方法焦点：shouldParkAfterFailedAcquire + parkAndCheckInterrupt",
+            state: "2",
+            owner: "T1",
+            queueSummary: "H(ws=-1) <-> N2(parked)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "持锁中"},
+                {name: "T2", state: "PARKED", desc: "LockSupport.park 阻塞", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2"},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "acquireQueued(N2, 1) for-loop#2",
+                "shouldParkAfterFailedAcquire(H, N2) => true",
+                "parkAndCheckInterrupt()"
+            ],
+            micro: [
+                "pred.ws == SIGNAL，满足安全阻塞条件",
+                "调用 LockSupport.park(this)",
+                "线程从 RUNNING 进入 PARKED，等待 unpark 或中断"
+            ],
+            cas: [
+                "本步无新 CAS（关键是 park）"
+            ],
+            delta: [
+                "T2: RUNNING -> PARKED",
+                "队列结构与指针不变"
+            ],
+            next: [
+                "接下来展示重入锁分两次 unlock 的行为差异"
+            ]
+        },
+        {
+            title: "7) T1 第一次 unlock()：仅减计数，不唤醒",
+            summary: "T1 调用 unlock，tryRelease 计算 c=state-1=1，free=false，release 返回 false，不触发 unpark",
+            focus: "方法焦点：ReentrantLock.unlock -> release(1) -> tryRelease",
+            state: "1",
+            owner: "T1",
+            queueSummary: "H(ws=-1) <-> N2(仍 parked)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "执行第一次 unlock", active: true},
+                {name: "T2", state: "PARKED", desc: "仍阻塞等待"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "N2"},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "H", next: "null"}
+            ],
+            chain: [
+                "ReentrantLock.unlock()",
+                "Sync.release(1)",
+                "Sync.tryRelease(1)"
+            ],
+            micro: [
+                "校验当前线程是否 owner，T1 命中",
+                "c = getState() - releases = 2 - 1 = 1",
+                "c != 0，free=false，不清 owner",
+                "release 因 tryRelease=false 直接返回"
+            ],
+            cas: [
+                "本实现 tryRelease 直接 setState(c)（非 CAS）"
+            ],
+            delta: [
+                "state: 2 -> 1",
+                "owner 仍为 T1",
+                "未执行 unparkSuccessor"
+            ],
+            next: [
+                "第二次 unlock 才会彻底释放并唤醒后继"
+            ]
+        },
+        {
+            title: "8) T1 第二次 unlock()：完全释放并唤醒 N2",
+            summary: "T1 执行 release(1) 时 tryRelease 成功，head=H 且 ws=-1，unparkSuccessor(H) 先把 ws 复位到 0，再唤醒 N2",
+            focus: "方法焦点：tryRelease(完全释放) + unparkSuccessor",
+            state: "0",
+            owner: "null",
+            queueSummary: "H(ws=0) <-> N2(READY)",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "执行第二次 unlock", active: true},
+                {name: "T2", state: "READY", desc: "收到 unpark，等待 CPU" , active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "H", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "N2", active: true},
+                {id: "N2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "H", next: "null", active: true}
+            ],
+            chain: [
+                "ReentrantLock.unlock()",
+                "release(1)",
+                "tryRelease(1) => true",
+                "unparkSuccessor(head)"
+            ],
+            micro: [
+                "c = state - 1 = 0，free=true",
+                "setExclusiveOwnerThread(null)",
+                "release 中 h=head 且 h.waitStatus=-1，进入唤醒逻辑",
+                "unparkSuccessor 先 CAS(h.ws, -1, 0)，再 unpark(T2)"
+            ],
+            cas: [
+                "CAS(H.waitStatus, -1, 0) => success"
+            ],
+            delta: [
+                "state: 1 -> 0",
+                "owner: T1 -> null",
+                "T2: PARKED -> READY"
+            ],
+            next: [
+                "T2 被调度后回到 acquireQueued，尝试成为新 head"
+            ]
+        },
+        {
+            title: "9) T2 被唤醒后成功获取锁并 setHead",
+            summary: "T2 回到 acquireQueued，自旋命中 p==head 且 tryAcquire 成功，执行 setHead(N2)",
+            focus: "方法焦点：acquireQueued 成功分支 + setHead",
+            state: "1",
+            owner: "T2",
+            queueSummary: "head=tail=N2（旧 H 脱链）",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "已退出临界区"},
+                {name: "T2", state: "RUNNING", desc: "成为新 owner", active: true},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "null", next: "null", active: true}
+            ],
+            chain: [
+                "acquireQueued(N2, 1) 继续执行",
+                "p==head && tryAcquire(1) => true",
+                "setHead(N2)",
+                "p.next = null"
+            ],
+            micro: [
+                "tryAcquire 成功后 failed=false",
+                "setHead 会把新 head.thread 清空并置 prev=null",
+                "旧 head(H) 的 next 置空，帮助 GC",
+                "acquireQueued 返回 interrupted=false"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => success（发生在 nonfairTryAcquire 内）"
+            ],
+            delta: [
+                "state: 0 -> 1",
+                "owner: null -> T2",
+                "head: H -> N2",
+                "N2.thread: T2 -> null（成为 head 后清空）"
+            ],
+            next: [
+                "再引入 T3，展示 addWaiter 快速尾插分支"
+            ]
+        },
+        {
+            title: "10) T3 lock()：addWaiter 快速尾插成功",
+            summary: "T3 在 T2 持锁期间发起竞争，fast path 失败后进入 acquire，此时队列非空，addWaiter 直接 CAS tail 成功，最终形成 N2<->N3",
+            focus: "方法焦点：NonfairSync.lock + acquire + addWaiter fast path",
+            state: "1",
+            owner: "T2",
+            queueSummary: "N2(head) <-> N3(tail)",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "持锁中"},
+                {name: "T3", state: "RUNNING", desc: "成为 N3 并入队", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "null", next: "N3"},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "ReentrantLock.lock() by T3",
+                "NonfairSync.lock(): CAS(0, 1) failed",
+                "acquire(1): tryAcquire(1) -> false",
+                "addWaiter(EXCLUSIVE) fast path"
+            ],
+            micro: [
+                "c=getState()=1 且 owner=T2，tryAcquire 失败",
+                "读取 tail=N2（非空）",
+                "先写 node.prev = tail",
+                "CAS(tail, N2, N3) 成功后再写 N2.next = N3",
+                "形成稳定双向指针"
+            ],
+            cas: [
+                "CAS(tail, N2, N3) => success"
+            ],
+            delta: [
+                "tail: N2 -> N3",
+                "N3.prev: null -> N2",
+                "N2.next: null -> N3"
+            ],
+            next: [
+                "与 N2 类似，N3 会先把前驱状态置 SIGNAL，再进入 park"
+            ]
+        },
+        {
+            title: "11) acquireQueued#1：先设置前驱 SIGNAL（N3）",
+            summary: "N3 在 acquireQueued 中命中 p==head 但 tryAcquire 失败；shouldParkAfterFailedAcquire 把 pred(N2).waitStatus:0->-1(SIGNAL)",
+            focus: "方法焦点：acquireQueued + shouldParkAfterFailedAcquire",
+            state: "1",
+            owner: "T2",
+            queueSummary: "N2(ws=-1) <-> N3",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "持锁中"},
+                {name: "T3", state: "RUNNING", desc: "N3 自旋设置 SIGNAL", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "EXCLUSIVE", prev: "null", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "acquireQueued(N3, 1)",
+                "p = node.predecessor() => N2",
+                "tryAcquire(1) => false",
+                "shouldParkAfterFailedAcquire(N2, N3)"
+            ],
+            micro: [
+                "ws = pred.waitStatus = 0",
+                "命中 ws==0 分支，CAS(pred.ws, 0, SIGNAL)",
+                "返回 false：本轮不 park，要求调用方再自旋一次",
+                "目的：先让前驱承诺 “释放时会唤醒后继”"
+            ],
+            cas: [
+                "CAS(N2.waitStatus, 0, -1) => success"
+            ],
+            delta: [
+                "N2.waitStatus: 0 -> -1",
+                "N3 仍 RUNNING"
+            ],
+            next: [
+                "下一轮 pred.ws==SIGNAL，将允许 N3 真正 park"
+            ]
+        },
+        {
+            title: "12) acquireQueued#2：T3 进入 park",
+            summary: "第二轮 shouldParkAfterFailedAcquire 看到 pred.ws==SIGNAL 并返回 true；T3 调用 parkAndCheckInterrupt 进入阻塞",
+            focus: "方法焦点：shouldParkAfterFailedAcquire + parkAndCheckInterrupt",
+            state: "1",
+            owner: "T2",
+            queueSummary: "N2(ws=-1) <-> N3(parked)",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "持锁中"},
+                {name: "T3", state: "PARKED", desc: "等待被 N2 唤醒", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "EXCLUSIVE", prev: "null", next: "N3"},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "acquireQueued(N3, 1) for-loop#2",
+                "shouldParkAfterFailedAcquire(N2, N3) => true",
+                "parkAndCheckInterrupt()"
+            ],
+            micro: [
+                "pred.ws == SIGNAL，满足安全阻塞条件",
+                "调用 LockSupport.park(this)",
+                "线程从 RUNNING 进入 PARKED，等待 unpark 或中断"
+            ],
+            cas: [
+                "本步无 CAS"
+            ],
+            delta: [
+                "T3: RUNNING -> PARKED"
+            ],
+            next: [
+                "T2 unlock 后会通过 unparkSuccessor 唤醒 N3"
+            ]
+        },
+        {
+            title: "13) T2 unlock()：完全释放并唤醒 N3",
+            summary: "T2 执行 release(1) 时 tryRelease 成功，head=N2 且 ws=-1，unparkSuccessor(N2) 先把 ws 复位到 0，再唤醒 N3",
+            focus: "方法焦点：tryRelease(完全释放) + unparkSuccessor",
+            state: "0",
+            owner: "null",
+            queueSummary: "N2(ws=0) <-> N3(READY)",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "RUNNING", desc: "执行 unlock", active: true},
+                {name: "T3", state: "READY", desc: "收到 unpark" , active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N2", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "null", next: "N3", active: true},
+                {id: "N3", role: "TAIL", thread: "T3", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "N2", next: "null", active: true}
+            ],
+            chain: [
+                "unlock() by T2",
+                "release(1)",
+                "tryRelease(1) => free=true",
+                "unparkSuccessor(head=N2)"
+            ],
+            micro: [
+                "c = state - 1 = 0，free=true",
+                "setExclusiveOwnerThread(null)",
+                "release 中 h=head 且 h.waitStatus=-1，进入唤醒逻辑",
+                "unparkSuccessor 先 CAS(h.ws, -1, 0)，再 unpark(T3)"
+            ],
+            cas: [
+                "CAS(N2.waitStatus, -1, 0) => success"
+            ],
+            delta: [
+                "state: 1 -> 0",
+                "owner: T2 -> null",
+                "T3: PARKED -> READY"
+            ],
+            next: [
+                "T3 被调度后回到 acquireQueued，尝试成为新 head"
+            ]
+        },
+        {
+            title: "14) T3 被唤醒后成功获取锁并 setHead",
+            summary: "T3 回到 acquireQueued，自旋命中 p==head 且 tryAcquire 成功，执行 setHead(N3)",
+            focus: "方法焦点：acquireQueued 成功分支 + setHead",
+            state: "1",
+            owner: "T3",
+            queueSummary: "head=tail=N3",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "已释放"},
+                {name: "T3", state: "RUNNING", desc: "成为 owner", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N3", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "null", next: "null", active: true}
+            ],
+            chain: [
+                "acquireQueued(N3, 1) 继续执行",
+                "p==head && tryAcquire(1) => true",
+                "setHead(N3)",
+                "p.next = null"
+            ],
+            micro: [
+                "tryAcquire 成功后 failed=false",
+                "setHead 会把新 head.thread 清空并置 prev=null",
+                "旧 head(N2) 的 next 置空，帮助 GC",
+                "acquireQueued 返回 interrupted=false"
+            ],
+            cas: [
+                "CAS(state, 0, 1) => success（发生在 nonfairTryAcquire 内）"
+            ],
+            delta: [
+                "state: 0 -> 1",
+                "owner: null -> T3",
+                "head: N2 -> N3",
+                "N3.thread: T3 -> null（成为 head 后清空）"
+            ],
+            next: [
+                "最后展示正常释放收尾和非法 unlock 分支"
+            ]
+        },
+        {
+            title: "15) T3 unlock()：无后继时直接结束",
+            summary: "T3 release(1) 后 state=0，head=N3 且 ws=0，不满足 h.waitStatus!=0，因此不再 unpark",
+            focus: "方法焦点：release 的 “无后继唤醒” 分支",
+            state: "0",
+            owner: "null",
+            queueSummary: "仅 head 节点 N3（无等待者）",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "RUNNING", desc: "完成 unlock", active: true},
+                {name: "T4", state: "IDLE", desc: "未参与"}
+            ],
+            queue: [
+                {id: "N3", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "null", next: "null", active: true}
+            ],
+            chain: [
+                "unlock() by T3",
+                "tryRelease(1) => true",
+                "release(1): h.waitStatus == 0"
+            ],
+            micro: [
+                "state 归零，owner 清空",
+                "没有有效后继等待节点，唤醒逻辑短路",
+                "这是常见的 “最后一个持锁线程” 收尾场景"
+            ],
+            cas: [
+                "本步无 CAS"
+            ],
+            delta: [
+                "state: 1 -> 0",
+                "owner: T3 -> null"
+            ],
+            next: [
+                "补充错误分支：非 owner 调用 unlock 会抛 IllegalMonitorStateException"
+            ]
+        },
+        {
+            title: "16) 错误分支：T4 非持有者 unlock() 抛异常",
+            summary: "T4 调用 unlock，tryRelease 首行校验 currentThread != owner（owner=null），直接抛 IllegalMonitorStateException",
+            focus: "方法焦点：tryRelease 的 owner 校验分支",
+            state: "0",
+            owner: "null",
+            queueSummary: "队列不变",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未参与"},
+                {name: "T2", state: "IDLE", desc: "未参与"},
+                {name: "T3", state: "IDLE", desc: "未参与"},
+                {name: "T4", state: "EXCEPTION", desc: "unlock 触发 IllegalMonitorStateException", active: true}
+            ],
+            queue: [
+                {id: "N3", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "null", next: "null"}
+            ],
+            chain: [
+                "unlock() by T4",
+                "tryRelease(1)",
+                "if (currentThread != owner) throw IllegalMonitorStateException"
+            ],
+            micro: [
+                "AQS 通过 owner 校验保证互斥语义",
+                "非持有者不能释放锁，这是硬约束",
+                "异常由上层调用方决定是否捕获"
+            ],
+            cas: [
+                "本步无 CAS"
+            ],
+            delta: [
+                "state/owner/queue 全部不变",
+                "T4 状态标记为 EXCEPTION（教学表示）"
+            ],
+            next: [
+                "主流程结束：lock/unlock、重入、排队、唤醒、异常分支均已覆盖"
+            ]
+        }
+    ];
+
+    const el = {
+        prevBtn: document.getElementById("prevBtn"),
+        nextBtn: document.getElementById("nextBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        stateValue: document.getElementById("stateValue"),
+        ownerValue: document.getElementById("ownerValue"),
+        queueValue: document.getElementById("queueValue"),
+        threadLane: document.getElementById("threadLane"),
+        queueWrap: document.getElementById("queueWrap"),
+        stepTitle: document.getElementById("stepTitle"),
+        stepSummary: document.getElementById("stepSummary"),
+        focusBox: document.getElementById("focusBox"),
+        chainList: document.getElementById("chainList"),
+        microList: document.getElementById("microList"),
+        casList: document.getElementById("casList"),
+        deltaList: document.getElementById("deltaList"),
+        nextList: document.getElementById("nextList"),
+        timeline: document.getElementById("timeline"),
+        stepCounter: document.getElementById("stepCounter"),
+        stage: document.getElementById("stage"),
+        explain: document.querySelector(".explain")
+    };
+
+    let current = 0;
+    let fixedPanelHeight = null;
+
+    function stateClass(state) {
+        const s = String(state || "").toUpperCase();
+        if (s === "RUNNING") return "b-running";
+        if (s === "READY") return "b-ready";
+        if (s === "PARKED") return "b-parked";
+        if (s === "EXCEPTION") return "b-ex";
+        return "b-idle";
+    }
+
+    function wsClass(ws) {
+        if (ws > 0) return "pos";
+        if (ws < 0) return "neg";
+        return "zero";
+    }
+
+    function flashStage() {
+        el.stage.classList.remove("flash");
+        void el.stage.offsetWidth;
+        el.stage.classList.add("flash");
+        window.setTimeout(() => el.stage.classList.remove("flash"), 220);
+    }
+
+    function renderThreads(step) {
+        el.threadLane.innerHTML = "";
+        step.threads.forEach((thread) => {
+            const item = document.createElement("article");
+            item.className = `thread${thread.active ? " active" : ""}`;
+            item.innerHTML = `
+                <div class="thread-top">
+                    <strong class="thread-name">${thread.name}</strong>
+                    <span class="badge ${stateClass(thread.state)}">${thread.state}</span>
+                </div>
+                <p>${thread.desc}</p>
+            `;
+            el.threadLane.appendChild(item);
+        });
+    }
+
+    function buildBackwardChain(nodes) {
+        if (!nodes || nodes.length === 0) return "(空)";
+        return nodes.slice().reverse().map((n) => n.id).join(" -> ");
+    }
+
+    function renderQueue(step) {
+        el.queueWrap.innerHTML = "";
+        const nodes = step.queue || [];
+        if (nodes.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "queue-empty";
+            empty.textContent = "当前无节点（尚未创建 Sync Queue）";
+            el.queueWrap.appendChild(empty);
+            return;
+        }
+
+        const forward = document.createElement("div");
+        forward.className = "queue-forward";
+
+        nodes.forEach((node, index) => {
+            const card = document.createElement("article");
+            const classes = ["node"];
+            if (String(node.role || "").includes("HEAD")) classes.push("head");
+            if (node.ws > 0) classes.push("cancelled");
+            if (node.active) classes.push("active");
+            card.className = classes.join(" ");
+
+            const wsText = node.wsText !== undefined ? node.wsText : String(node.ws);
+
+            card.innerHTML = `
+                <div class="node-top">
+                    <span class="node-title">${node.id}</span>
+                    <span class="node-role">${node.role || "NODE"}</span>
+                </div>
+                <div class="node-line"><span class="label">thread:</span> ${node.thread}</div>
+                <div class="node-line"><span class="label">waitStatus:</span> <span class="ws ${wsClass(node.ws)}">${wsText}</span></div>
+                <div class="node-line"><span class="label">mode:</span> ${node.mode}</div>
+                <div class="node-line"><span class="label">prev:</span> ${node.prev}</div>
+                <div class="node-line"><span class="label">next:</span> ${node.next}</div>
+            `;
+            forward.appendChild(card);
+
+            if (index < nodes.length - 1) {
+                const arrow = document.createElement("span");
+                arrow.className = "arrow";
+                arrow.textContent = "→";
+                forward.appendChild(arrow);
+            }
+        });
+
+        el.queueWrap.appendChild(forward);
+
+        const pointer = document.createElement("div");
+        pointer.className = "pointer-panel";
+
+        const title1 = document.createElement("div");
+        title1.className = "pointer-title";
+        title1.textContent = "双向指针快照";
+        pointer.appendChild(title1);
+
+        nodes.forEach((node) => {
+            const line = document.createElement("div");
+            line.className = "pointer-line";
+            line.textContent = `${node.id}.prev=${node.prev}, ${node.id}.next=${node.next}`;
+            pointer.appendChild(line);
+        });
+
+        const title2 = document.createElement("div");
+        title2.className = "pointer-title";
+        title2.textContent = "反向遍历（tail -> head）";
+        pointer.appendChild(title2);
+
+        const backward = document.createElement("div");
+        backward.className = "pointer-line";
+        backward.textContent = buildBackwardChain(nodes);
+        pointer.appendChild(backward);
+
+        el.queueWrap.appendChild(pointer);
+    }
+
+    function renderList(target, lines, emptyText) {
+        target.innerHTML = "";
+        if (!lines || lines.length === 0) {
+            const li = document.createElement("li");
+            li.className = "empty";
+            li.textContent = emptyText;
+            target.appendChild(li);
+            return;
+        }
+
+        lines.forEach((line) => {
+            const li = document.createElement("li");
+            li.textContent = line;
+            target.appendChild(li);
+        });
+    }
+
+    function renderTimeline() {
+        el.timeline.innerHTML = "";
+        steps.forEach((step, index) => {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            const classes = ["step-chip"];
+            if (index < current) classes.push("done");
+            if (index === current) classes.push("active");
+            chip.className = classes.join(" ");
+            chip.textContent = step.title.replace(/^\d+\)\s*/, "");
+            chip.addEventListener("click", () => {
+                current = index;
+                render(true);
+            });
+            el.timeline.appendChild(chip);
+        });
+    }
+
+    function render(animate) {
+        const step = steps[current];
+
+        el.stateValue.textContent = step.state;
+        el.ownerValue.textContent = step.owner;
+        el.queueValue.textContent = step.queueSummary;
+
+        renderThreads(step);
+        renderQueue(step);
+
+        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepSummary.textContent = step.summary;
+        el.focusBox.textContent = step.focus;
+
+        renderList(el.chainList, step.chain, "暂无调用链");
+        renderList(el.microList, step.micro, "暂无细节点");
+        renderList(el.casList, step.cas, "本步无 CAS");
+        renderList(el.deltaList, step.delta, "本步无字段变化");
+        renderList(el.nextList, step.next, "流程结束");
+
+        renderTimeline();
+        el.stepCounter.textContent = `第 ${current + 1} / ${steps.length} 步`;
+
+        el.prevBtn.disabled = current === 0;
+        el.nextBtn.disabled = current === steps.length - 1;
+
+        if (fixedPanelHeight !== null) {
+            const h = `${fixedPanelHeight}px`;
+            el.stage.style.height = h;
+            el.explain.style.height = h;
+        }
+
+        if (animate) flashStage();
+    }
+
+    function computeFixedPanelHeight() {
+        const savedCurrent = current;
+
+        fixedPanelHeight = null;
+        el.stage.style.height = "auto";
+        el.explain.style.height = "auto";
+
+        let maxStage = 0;
+        let maxExplain = 0;
+
+        for (let i = 0; i < steps.length; i += 1) {
+            current = i;
+            render(false);
+            maxStage = Math.max(maxStage, el.stage.scrollHeight);
+            maxExplain = Math.max(maxExplain, el.explain.scrollHeight);
+        }
+
+        fixedPanelHeight = Math.max(maxStage, maxExplain);
+        current = savedCurrent;
+    }
+
+    function prev() {
+        if (current > 0) {
+            current -= 1;
+            render(true);
+        }
+    }
+
+    function next() {
+        if (current < steps.length - 1) {
+            current += 1;
+            render(true);
+        }
+    }
+
+    el.prevBtn.addEventListener("click", prev);
+    el.nextBtn.addEventListener("click", next);
+    el.resetBtn.addEventListener("click", () => {
+        current = 0;
+        render(true);
+    });
+
+    window.addEventListener("keydown", (event) => {
+        const target = event.target;
+        const tag = target && target.tagName ? target.tagName.toUpperCase() : "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (target && target.isContentEditable)) {
+            return;
+        }
+
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            prev();
+        } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            next();
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            current = 0;
+            render(true);
+        }
+    });
+
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(() => {
+            computeFixedPanelHeight();
+            render(false);
+        }, 120);
+    });
+
+    render(false);
+    computeFixedPanelHeight();
+    render(false);
+})();
+</script>
+</body>
+</html>

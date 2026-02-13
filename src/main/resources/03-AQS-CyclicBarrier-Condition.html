@@ -1,0 +1,1722 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AQS 条件变量动画流程图（CyclicBarrier）</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --soft: #f1f5f9;
+            --line: #dbe3ef;
+            --text: #0f172a;
+            --muted: #475569;
+            --blue: #2563eb;
+            --violet: #7c3aed;
+            --green: #16a34a;
+            --orange: #ea580c;
+            --red: #dc2626;
+            --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(165deg, #eaf2ff 0%, var(--bg) 56%);
+            color: var(--text);
+            line-height: 1.56;
+        }
+
+        .app {
+            width: min(1460px, calc(100vw - 20px));
+            margin: 12px auto 26px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .app > *,
+        .layout > *,
+        .stage > * {
+            min-width: 0;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            box-shadow: var(--shadow);
+        }
+
+        .hero {
+            padding: 14px 16px;
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-size: clamp(22px, 2.6vw, 31px);
+            line-height: 1.26;
+        }
+
+        .hero p {
+            margin: 7px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .hero .tip {
+            margin-top: 8px;
+            padding: 7px 10px;
+            background: var(--soft);
+            border: 1px solid #d6e2f6;
+            border-radius: 9px;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        .controls {
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .model-pill {
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .btn {
+            border: 1px solid #c8d5ea;
+            background: #ffffff;
+            color: #1e293b;
+            border-radius: 9px;
+            padding: 7px 11px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.18s ease;
+        }
+
+        .btn:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .btn:focus-visible,
+        .step-chip:focus-visible {
+            outline: 2px solid var(--blue);
+            outline-offset: 2px;
+        }
+
+        .btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
+        .control-note {
+            margin-left: auto;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1.55fr 1fr;
+            gap: 10px;
+            align-items: start;
+        }
+
+        .stage {
+            padding: 10px;
+            display: grid;
+            grid-template-rows: auto 196px minmax(0, 1fr) minmax(0, 1fr);
+            gap: 8px;
+            transition: box-shadow 0.18s ease, border-color 0.18s ease;
+            align-content: start;
+        }
+
+        .stage.flash {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13), var(--shadow);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .status {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #f8fbff;
+            padding: 7px;
+            min-height: 72px;
+        }
+
+        .status span {
+            display: block;
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .status strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 13px;
+            line-height: 1.36;
+            color: #0f172a;
+        }
+
+        .status-count strong,
+        .status-owner strong,
+        .status-result strong {
+            font-family: Menlo, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .lane {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            background: #fcfdff;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .lane h3 {
+            margin: 0 0 7px;
+            font-size: 13px;
+            color: #334155;
+        }
+
+        .lane-threads {
+            min-height: 196px;
+        }
+
+        .lane-queue {
+            min-height: 236px;
+        }
+
+        .threads {
+            display: grid;
+            gap: 7px;
+            grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+            grid-auto-rows: 76px;
+            align-content: start;
+            flex: 1;
+        }
+
+        .thread {
+            border: 1px solid #d9e3f2;
+            border-radius: 9px;
+            background: #ffffff;
+            padding: 7px;
+            height: 76px;
+            transition: 0.18s ease;
+        }
+
+        .thread.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .thread-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .thread-name {
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .badge {
+            border-radius: 999px;
+            padding: 2px 7px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+
+        .b-running {
+            background: #dcfce7;
+            color: #065f46;
+        }
+
+        .b-ready {
+            background: #dbeafe;
+            color: #1e3a8a;
+        }
+
+        .b-parked {
+            background: #ffedd5;
+            color: #9a3412;
+        }
+
+        .b-idle {
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+        .b-ex {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .thread p {
+            margin: 6px 0 0;
+            font-size: 11px;
+            color: #475569;
+        }
+
+        .queue-wrap {
+            display: grid;
+            grid-template-rows: auto auto;
+            gap: 6px;
+            align-content: start;
+        }
+
+        .queue-empty {
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 7px 9px;
+            font-size: 12px;
+            color: #64748b;
+            background: #f8fafc;
+            min-height: 72px;
+            display: flex;
+            align-items: center;
+        }
+
+        .queue-forward {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            align-items: center;
+            align-content: flex-start;
+            min-height: 0;
+        }
+
+        .arrow {
+            color: #94a3b8;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1;
+            user-select: none;
+        }
+
+        .node {
+            width: 198px;
+            border: 1px solid #d2dceb;
+            border-radius: 10px;
+            background: #ffffff;
+            padding: 7px;
+            transition: 0.18s ease;
+        }
+
+        .node.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .node.head {
+            border-color: #a78bfa;
+            background: #f8f5ff;
+        }
+
+        .node.condition {
+            border-color: #93c5fd;
+            background: #f0f7ff;
+        }
+
+        .node.cancelled {
+            border-color: #fca5a5;
+            background: #fff1f2;
+        }
+
+        .node-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+
+        .node-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .node-role {
+            font-size: 10px;
+            border-radius: 999px;
+            padding: 1px 6px;
+            background: #e2e8f0;
+            color: #334155;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .node-line {
+            font-size: 11px;
+            color: #334155;
+            margin: 1px 0;
+        }
+
+        .node-line .label {
+            color: #64748b;
+        }
+
+        .ws {
+            font-weight: 700;
+        }
+
+        .ws.neg {
+            color: #0f766e;
+        }
+
+        .ws.zero {
+            color: #1d4ed8;
+        }
+
+        .ws.pos {
+            color: #dc2626;
+        }
+
+        .pointer-panel {
+            border: 1px solid #dbe3ef;
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 7px 7px 10px;
+            display: grid;
+            gap: 5px;
+            min-height: 118px;
+            align-content: start;
+        }
+
+        .pointer-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #334155;
+        }
+
+        .pointer-line {
+            font-family: Menlo, Consolas, monospace;
+            font-size: 11px;
+            color: #1f2937;
+            line-height: 1.45;
+        }
+
+        .explain {
+            padding: 10px;
+            display: grid;
+            gap: 8px;
+            align-content: start;
+        }
+
+        .explain h2 {
+            margin: 0;
+            font-size: 19px;
+            line-height: 1.34;
+        }
+
+        .explain .summary {
+            margin: 0;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .focus-box {
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            border-radius: 9px;
+            padding: 7px 8px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .detail {
+            border: 1px solid #dbe3ef;
+            border-radius: 9px;
+            background: #ffffff;
+            padding: 7px;
+        }
+
+        .detail h3 {
+            margin: 0 0 6px;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        .detail ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 5px;
+        }
+
+        .detail li {
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            background: #f8fafc;
+            padding: 5px 7px;
+            font-size: 12px;
+            color: #334155;
+            line-height: 1.45;
+        }
+
+        .queue-change-arrow {
+            color: #ea580c;
+            font-weight: 800;
+        }
+
+        .detail li.empty {
+            color: #64748b;
+            border-style: dashed;
+        }
+
+        .note {
+            border: 1px solid #dbe3ef;
+            border-radius: 9px;
+            background: #f8fafc;
+            padding: 7px;
+            font-size: 11px;
+            color: #475569;
+            line-height: 1.48;
+        }
+
+        .timeline-card {
+            padding: 10px;
+        }
+
+        .timeline-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            margin-bottom: 7px;
+        }
+
+        .timeline-head h3 {
+            margin: 0;
+            font-size: 13px;
+            color: #334155;
+        }
+
+        .timeline-head span {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .timeline {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            min-height: 74px;
+        }
+
+        .step-chip {
+            border: 1px solid #cbd5e1;
+            border-radius: 9px;
+            background: #ffffff;
+            color: #334155;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.18s ease;
+        }
+
+        .step-chip:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .step-chip.done {
+            border-color: #86efac;
+            background: #f0fdf4;
+            color: #166534;
+        }
+
+        .step-chip.active {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        @media (max-width: 1180px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .control-note {
+                width: 100%;
+                margin-left: 0;
+            }
+
+            .status-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 760px) {
+            .app {
+                width: calc(100% - 10px);
+                margin-top: 6px;
+            }
+
+            .stage {
+                grid-template-rows: auto auto auto auto;
+            }
+
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .node {
+                width: 100%;
+            }
+
+            .queue-forward {
+                display: grid;
+                grid-template-columns: 1fr;
+            }
+
+            .arrow {
+                justify-self: center;
+                transform: rotate(90deg);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <section class="hero card">
+        <h1>AQS 条件变量动画流程图（以 CyclicBarrier 为实现）</h1>
+        <p>按 CyclicBarrier 的真实源码路径演示：<code>await() -> dowait() -> Condition.await/signalAll</code>，重点观察 Condition Queue 与 Sync Queue 的节点迁移</p>
+        <div class="tip">核心提醒：CyclicBarrier 本身不是 AQS 子类；它复用的是 ReentrantLock（AQS 独占）和 ConditionObject（AQS 条件队列）</div>
+    </section>
+
+    <section class="controls card" aria-label="流程控制">
+        <button id="prevBtn" class="btn" type="button">⏮ 上一步</button>
+        <button id="nextBtn" class="btn" type="button">⏭ 下一步</button>
+        <button id="resetBtn" class="btn" type="button">↺ 重置</button>
+        <div class="model-pill">演示模型：CyclicBarrier(3) + ReentrantLock + Condition trip</div>
+        <div class="control-note">快捷键：← 上一步，→ 下一步，Home 重置</div>
+    </section>
+
+    <section class="layout">
+        <article id="stage" class="stage card" aria-live="off">
+            <div class="status-grid">
+                <div class="status status-generation">
+                    <span>generation / broken</span>
+                    <strong id="generationValue">-</strong>
+                </div>
+                <div class="status status-count">
+                    <span>count（剩余到达数）</span>
+                    <strong id="countValue">-</strong>
+                </div>
+                <div class="status status-owner">
+                    <span>lock owner</span>
+                    <strong id="ownerValue">-</strong>
+                </div>
+                <div class="status status-result">
+                    <span>本步结果</span>
+                    <strong id="resultValue">-</strong>
+                </div>
+            </div>
+
+            <section class="lane lane-threads">
+                <h3>线程状态（T1/T2/T3）</h3>
+                <div id="threadLane" class="threads"></div>
+            </section>
+
+            <section class="lane lane-queue">
+                <h3>Condition Queue（firstWaiter -> nextWaiter）</h3>
+                <div id="conditionWrap" class="queue-wrap"></div>
+            </section>
+
+            <section class="lane lane-queue">
+                <h3>Sync Queue（AQS 双向链表）</h3>
+                <div id="syncWrap" class="queue-wrap"></div>
+            </section>
+        </article>
+
+        <aside class="explain card">
+            <h2 id="stepTitle">-</h2>
+            <p id="stepSummary" class="summary">-</p>
+            <div id="focusBox" class="focus-box">-</div>
+
+            <section class="detail">
+                <h3>调用链（当前步骤）</h3>
+                <ul id="chainList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>方法内细节点（逐条）</h3>
+                <ul id="microList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>CAS / 原子操作</h3>
+                <ul id="casList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>关键字段变化</h3>
+                <ul id="deltaList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>为何进入下一步</h3>
+                <ul id="nextList"></ul>
+            </section>
+
+            <div class="note">教学抽象：节点 ID（C1/S1 等）是可视化标签，不代表 JDK 源码真实字段名；但状态迁移与调用顺序严格对应源码语义</div>
+        </aside>
+    </section>
+
+    <section class="timeline-card card">
+        <div class="timeline-head">
+            <h3>完整时间线（可点击跳转）</h3>
+            <span id="stepCounter">-</span>
+        </div>
+        <div id="timeline" class="timeline"></div>
+    </section>
+
+    <section class="timeline-card card">
+        <div class="timeline-head">
+            <h3>读图提示</h3>
+        </div>
+        <section class="detail">
+            <ul>
+                <li>Condition Queue 节点 waitStatus 为 CONDITION(-2)，只在调用 <code>Condition.await()</code> 时出现</li>
+                <li><code>signalAll()</code> 不是直接 “放行”；它只是把条件节点转移到 Sync Queue，线程仍需重新竞争锁</li>
+                <li>CyclicBarrier 的正常放行来自 <code>nextGeneration()</code>；异常放行来自 <code>breakBarrier()</code></li>
+                <li>同一实例可循环使用：每次正常通过后都会创建新 generation 并重置 count</li>
+            </ul>
+        </section>
+    </section>
+</div>
+
+<script>
+(() => {
+    const steps = [
+        {
+            title: "1) 初始化 CyclicBarrier：parties=3，generation=g0",
+            summary: "CyclicBarrier 通过 ReentrantLock + Condition trip 管理等待线程；初始 generation=g0（broken=false），count=3",
+            focus: "方法焦点：CyclicBarrier(int, Runnable) 构造",
+            generation: "g0 / broken=false",
+            count: "3（parties=3）",
+            owner: "-",
+            result: "-",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "未到达屏障"},
+                {name: "T2", state: "IDLE", desc: "未到达屏障"},
+                {name: "T3", state: "IDLE", desc: "未到达屏障"}
+            ],
+            condition: [],
+            sync: [],
+            chain: [
+                "new CyclicBarrier(3, barrierCommand)",
+                "generation = new Generation()",
+                "count = parties"
+            ],
+            micro: [
+                "generation.broken 初始为 false",
+                "trip 由 lock.newCondition() 创建",
+                "Condition Queue 与 Sync Queue 都为空"
+            ],
+            cas: ["构造阶段仅字段赋值，无 CAS"],
+            delta: [
+                "parties 固定为 3",
+                "count: 未初始化 -> 3",
+                "generation: null -> g0"
+            ],
+            next: ["T1 首先调用 await()，进入 dowait(false, 0L)"]
+        },
+        {
+            title: "2) T1 到达：--count 得到 index=2（非最后线程）",
+            summary: "T1 获取锁后进入 dowait，检查 broken/中断都通过；执行 --count 得到 index=2，说明还需两个线程到达",
+            focus: "方法焦点：dowait() 前半段（lock + 前置检查 + --count）",
+            generation: "g0 / broken=false",
+            count: "2（还差 2 个线程）",
+            owner: "T1",
+            result: "index=2",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "持锁执行 dowait", active: true},
+                {name: "T2", state: "IDLE", desc: "尚未到达"},
+                {name: "T3", state: "IDLE", desc: "尚未到达"}
+            ],
+            condition: [],
+            sync: [],
+            chain: [
+                "await() by T1 -> dowait()",
+                "dowait(false, 0L)",
+                "lock.lock()",
+                "index = --count  // 3 -> 2"
+            ],
+            micro: [
+                "g.broken 为 false，不抛 BrokenBarrierException",
+                "Thread.interrupted() 为 false，不走 breakBarrier",
+                "index != 0，进入 for(;;) 并准备 trip.await()"
+            ],
+            cas: ["ReentrantLock 非公平 fast path：CAS(state, 0, 1) 成功"],
+            delta: [
+                "count: 3 -> 2",
+                "lockOwner: null -> T1"
+            ],
+            next: ["T1 将调用 Condition.await：入 Condition Queue + 释放锁 + park"]
+        },
+        {
+            title: "3) T1 执行 trip.await：进入 Condition Queue 并挂起",
+            summary: "Condition.await 会先 addConditionWaiter(C1)，再 fullyRelease 释放锁，随后在 isOnSyncQueue(C1)==false 时 park",
+            focus: "方法焦点：ConditionObject.await()",
+            generation: "g0 / broken=false",
+            count: "2",
+            owner: "-",
+            result: "T1 PARKED",
+            threads: [
+                {name: "T1", state: "PARKED", desc: "等待 signal/signalAll", active: true},
+                {name: "T2", state: "IDLE", desc: "尚未到达"},
+                {name: "T3", state: "IDLE", desc: "尚未到达"}
+            ],
+            condition: [
+                {id: "C1", role: "WAITER", thread: "T1", ws: -2, wsText: "-2 (CONDITION)", nextWaiter: "null", active: true}
+            ],
+            sync: [],
+            chain: [
+                "trip.await() by T1",
+                "addConditionWaiter() -> C1",
+                "fullyRelease(C1)",
+                "while (!isOnSyncQueue(C1)) park"
+            ],
+            micro: [
+                "C1 挂在 firstWaiter/lastWaiter",
+                "fullyRelease 会调用 AQS release，完全释放独占锁",
+                "释放后 T1 不在 Sync Queue，只在 Condition Queue"
+            ],
+            cas: ["本步关键是 release state=1->0（非 CAS）"],
+            delta: [
+                "firstWaiter: null -> C1",
+                "lastWaiter: null -> C1",
+                "lockOwner: T1 -> null"
+            ],
+            next: ["T2 到达时也会走同一 await 路径"]
+        },
+        {
+            title: "4) T2 到达并 await：Condition Queue 形成 C1 -> C2",
+            summary: "T2 获取锁后 --count 得到 index=1，随后进入 trip.await，将 C2 追加到条件队列尾部并 park",
+            focus: "方法焦点：addConditionWaiter 尾插 + await 挂起",
+            generation: "g0 / broken=false",
+            count: "1（还差 1 个线程）",
+            owner: "-",
+            result: "T2 PARKED",
+            threads: [
+                {name: "T1", state: "PARKED", desc: "已在 C1"},
+                {name: "T2", state: "PARKED", desc: "已在 C2", active: true},
+                {name: "T3", state: "IDLE", desc: "尚未到达"}
+            ],
+            condition: [
+                {id: "C1", role: "WAITER", thread: "T1", ws: -2, wsText: "-2 (CONDITION)", nextWaiter: "C2"},
+                {id: "C2", role: "WAITER", thread: "T2", ws: -2, wsText: "-2 (CONDITION)", nextWaiter: "null", active: true}
+            ],
+            sync: [],
+            chain: [
+                "await() by T2 -> dowait()",
+                "index = --count  // 2 -> 1",
+                "trip.await()",
+                "addConditionWaiter() 尾插 C2"
+            ],
+            micro: [
+                "Condition 队列是单向链：nextWaiter",
+                "C1/C2 都不在 Sync Queue，尚不可竞争锁",
+                "T1/T2 均进入 park 等待唤醒"
+            ],
+            cas: ["ReentrantLock 获取锁：CAS(state, 0, 1) 成功"],
+            delta: [
+                "count: 2 -> 1",
+                "lastWaiter: C1 -> C2"
+            ],
+            next: ["T3 作为最后到达者会触发 index==0 分支"]
+        },
+        {
+            title: "5) T3 最后到达：index=0，执行 barrierCommand",
+            summary: "T3 在持锁状态下 --count 到 0，进入 “最后到达者” 分支，先执行 barrierCommand，然后调用 nextGeneration",
+            focus: "方法焦点：if (index == 0) { ... nextGeneration(); return 0; }",
+            generation: "g0 / broken=false",
+            count: "0（即将翻代）",
+            owner: "T3",
+            result: "index=0",
+            threads: [
+                {name: "T1", state: "PARKED", desc: "等待 trip.signalAll"},
+                {name: "T2", state: "PARKED", desc: "等待 trip.signalAll"},
+                {name: "T3", state: "RUNNING", desc: "最后到达者，执行命令", active: true}
+            ],
+            condition: [
+                {id: "C1", role: "WAITER", thread: "T1", ws: -2, wsText: "-2 (CONDITION)", nextWaiter: "C2"},
+                {id: "C2", role: "WAITER", thread: "T2", ws: -2, wsText: "-2 (CONDITION)", nextWaiter: "null"}
+            ],
+            sync: [],
+            chain: [
+                "await() by T3 -> dowait()",
+                "index = --count  // 1 -> 0",
+                "barrierCommand.run()",
+                "nextGeneration()"
+            ],
+            micro: [
+                "index==0 线程负责 “开闸”",
+                "barrierCommand 在 lock 内执行",
+                "若 command 失败会走 breakBarrier（本流程假设成功）"
+            ],
+            cas: ["ReentrantLock 获取锁：CAS(state, 0, 1) 成功"],
+            delta: [
+                "count: 1 -> 0",
+                "lockOwner: null -> T3"
+            ],
+            next: ["nextGeneration 将 signalAll，并把条件节点转移到 Sync Queue"]
+        },
+        {
+            title: "6) nextGeneration：signalAll 转移条件节点并重置代",
+            summary: "trip.signalAll 触发 doSignalAll：C1/C2 逐个 transferForSignal，先从 CONDITION(-2) 改到 0，再 enq 到 Sync Queue，随后 count 复位并创建 g1",
+            focus: "方法焦点：nextGeneration() + ConditionObject.doSignalAll()",
+            generation: "g1 / broken=false",
+            count: "3（重置完成）",
+            owner: "T3",
+            result: "已 signalAll",
+            threads: [
+                {name: "T1", state: "READY", desc: "已转入 Sync Queue，待抢锁", active: true},
+                {name: "T2", state: "READY", desc: "已转入 Sync Queue，待抢锁", active: true},
+                {name: "T3", state: "RUNNING", desc: "仍持锁，尚未 unlock"}
+            ],
+            condition: [],
+            sync: [
+                {id: "H", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "S1"},
+                {id: "S1", role: "NODE", thread: "T1", ws: -1, wsText: "-1 (SIGNAL)", mode: "EXCLUSIVE", prev: "H", next: "S2", active: true},
+                {id: "S2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "S1", next: "null", active: true}
+            ],
+            chain: [
+                "nextGeneration()",
+                "trip.signalAll()",
+                "doSignalAll(firstWaiter)",
+                "transferForSignal(C1/C2) -> enq"
+            ],
+            micro: [
+                "Condition Queue 被一次性清空（first/last 置 null）",
+                "等待线程并未直接执行，必须先到 Sync Queue 竞争锁",
+                "count 重置为 parties，generation 切换为 g1"
+            ],
+            cas: [
+                "CAS(head, null, H) 成功（初始化 Sync Queue）",
+                "CAS(C1.waitStatus, CONDITION, 0) 成功",
+                "CAS(C2.waitStatus, CONDITION, 0) 成功",
+                "CAS(tail, H, S1) / CAS(tail, S1, S2) 成功"
+            ],
+            delta: [
+                "generation: g0 -> g1",
+                "count: 0 -> 3",
+                "Condition Queue: C1->C2 -> 空",
+                "Sync Queue: 空 -> H<->S1<->S2"
+            ],
+            next: ["T3 释放锁后，Sync Queue 头结点后继会被唤醒竞争"]
+        },
+        {
+            title: "7) T3 返回 0 并 unlock：唤醒 Sync Queue 首节点",
+            summary: "最后到达者返回 0 前会在 finally 解锁，AQS release 路径唤醒首个后继（这里是 S1/T1）",
+            focus: "方法焦点：dowait finally + lock.unlock()",
+            generation: "g1 / broken=false",
+            count: "3",
+            owner: "-",
+            result: "T3 return 0",
+            threads: [
+                {name: "T1", state: "READY", desc: "S1 被唤醒，准备 acquireQueued", active: true},
+                {name: "T2", state: "READY", desc: "仍在 Sync Queue 排队"},
+                {name: "T3", state: "IDLE", desc: "已通过屏障，返回 0"}
+            ],
+            condition: [],
+            sync: [
+                {id: "H", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "S1"},
+                {id: "S1", role: "NODE", thread: "T1", ws: -1, wsText: "-1 (SIGNAL)", mode: "EXCLUSIVE", prev: "H", next: "S2", active: true},
+                {id: "S2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "S1", next: "null"}
+            ],
+            chain: [
+                "dowait() -> return 0",
+                "finally { lock.unlock(); }",
+                "AQS.release(1)",
+                "unparkSuccessor(head)"
+            ],
+            micro: [
+                "signalAll 后的线程现在才真正开始竞争锁",
+                "T1 在 Condition.await 内部继续执行 isOnSyncQueue/acquireQueued",
+                "T2 仍保持队列顺序等待"
+            ],
+            cas: ["本步核心是 release + unpark（无新增关键 CAS）"],
+            delta: [
+                "lockOwner: T3 -> null",
+                "T3 业务层返回值固定为 0"
+            ],
+            next: ["T1 重新获得锁后，会因 g!=generation 返回旧 index=2"]
+        },
+        {
+            title: "8) T1 重新获取锁：检测到翻代，返回 index=2",
+            summary: "T1 在 Condition.await 中完成 acquireQueued 后回到 dowait 循环，发现本地 g0 != 当前 g1，于是返回 index=2",
+            focus: "方法焦点：Condition.await 唤醒后 + dowait 中 g != generation 判断",
+            generation: "g1 / broken=false",
+            count: "3",
+            owner: "-",
+            result: "T1 return 2",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "已返回 index=2", active: true},
+                {name: "T2", state: "READY", desc: "仍等待获取锁"},
+                {name: "T3", state: "IDLE", desc: "已返回 index=0"}
+            ],
+            condition: [],
+            sync: [
+                {id: "S1", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "S2"},
+                {id: "S2", role: "TAIL", thread: "T2", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "S1", next: "null", active: true}
+            ],
+            chain: [
+                "Condition.await() 内部 acquireQueued(S1)",
+                "返回 dowait for(;;)",
+                "if (g != generation) return index",
+                "finally unlock"
+            ],
+            micro: [
+                "T1 的 index 在最初到达时就固定为 2",
+                "翻代是 “通过屏障” 的判定条件",
+                "T1 退出后队列头推进到 S1"
+            ],
+            cas: ["CAS(state, 0, 1) 获取锁成功（T1）"],
+            delta: [
+                "Sync Queue: H<->S1<->S2 -> S1<->S2",
+                "T1: READY -> IDLE(return 2)"
+            ],
+            next: ["T2 将重复同样逻辑并返回 index=1"]
+        },
+        {
+            title: "9) T2 重新获取锁：返回 index=1，第一轮结束",
+            summary: "T2 成为下一位获取锁的线程，检测到 g0 已切到 g1，返回 index=1；第一轮三个线程全部通过屏障",
+            focus: "方法焦点：第二个等待线程的唤醒与返回",
+            generation: "g1 / broken=false",
+            count: "3",
+            owner: "-",
+            result: "T2 return 1",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "已返回 index=2"},
+                {name: "T2", state: "IDLE", desc: "已返回 index=1", active: true},
+                {name: "T3", state: "IDLE", desc: "已返回 index=0"}
+            ],
+            condition: [],
+            sync: [
+                {id: "H", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "null"}
+            ],
+            chain: [
+                "T2 acquireQueued(S2)",
+                "dowait 检测 g != generation",
+                "return index=1",
+                "unlock"
+            ],
+            micro: [
+                "Condition 队列已清空",
+                "Sync Queue 收敛为仅虚拟头 H",
+                "T2 完成后，原 S2 退化为虚拟头并在图中记为 H",
+                "CyclicBarrier 进入下一轮可复用状态"
+            ],
+            cas: ["CAS(state, 0, 1) 获取锁成功（T2）"],
+            delta: [
+                "T2: READY -> IDLE(return 1)",
+                "Sync Queue: S1<->S2 -> H（S2 退化为虚拟头）"
+            ],
+            next: ["第二轮中演示异常路径：等待中断触发 breakBarrier"]
+        },
+        {
+            title: "10) 第二轮：T1/T2 再次 await，进入 C1 -> C2",
+            summary: "在 g1 中，T1/T2 再次到达并挂起，count 从 3 递减到 1，Condition Queue 重建为 C1->C2，体现 cyclic 特性",
+            focus: "方法焦点：可复用轮次中的 await 路径",
+            generation: "g1 / broken=false",
+            count: "1（本轮还差 T3）",
+            owner: "-",
+            result: "T1/T2 均 PARKED",
+            threads: [
+                {name: "T1", state: "PARKED", desc: "第二轮等待中（C1）"},
+                {name: "T2", state: "PARKED", desc: "第二轮等待中（C2）", active: true},
+                {name: "T3", state: "IDLE", desc: "尚未到达第二轮"}
+            ],
+            condition: [
+                {id: "C1", role: "WAITER", thread: "T1", ws: -2, wsText: "-2 (CONDITION)", nextWaiter: "C2"},
+                {id: "C2", role: "WAITER", thread: "T2", ws: -2, wsText: "-2 (CONDITION)", nextWaiter: "null", active: true}
+            ],
+            sync: [
+                {id: "H", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "null"}
+            ],
+            chain: [
+                "T1 await -> C1",
+                "T2 await -> C2",
+                "count: 3 -> 2 -> 1",
+                "均在 trip.await 中 park"
+            ],
+            micro: [
+                "每轮都是新一组 Condition waiter",
+                "节点被 signalAll 转移后不会继续留在 Condition 链",
+                "当前仍未触发屏障，因为 index 还未到 0",
+                "此时 Sync Queue 仅有上一轮留下的虚拟头 H"
+            ],
+            cas: ["两次 lock 获取都走 fast path CAS(state, 0, 1)"],
+            delta: [
+                "count: 3 -> 1",
+                "Condition Queue: 空 -> C1->C2",
+                "Sync Queue: H 保持不变"
+            ],
+            next: ["若等待期间线程被中断，将进入 breakBarrier 异常分支"]
+        },
+        {
+            title: "11) T2 在 trip.await 中被中断：先转移到 Sync Queue 再重新获取锁",
+            summary: "T2 在 Condition.await 等待区收到中断后，不会立刻把异常抛给 CyclicBarrier；必须先经 transferAfterCancelledWait 入 Sync Queue，并通过 acquireQueued 重新获取锁，随后 Condition.await 才向 dowait 抛出 InterruptedException",
+            focus: "方法焦点：ConditionObject.await 中断路径",
+            generation: "g1 / broken=false",
+            count: "1（尚未 breakBarrier）",
+            owner: "T2",
+            result: "Condition.await -> InterruptedException",
+            threads: [
+                {name: "T1", state: "PARKED", desc: "仍在 C1 等待 signalAll"},
+                {name: "T2", state: "RUNNING", desc: "已重新获取锁，准备进入 dowait catch", active: true},
+                {name: "T3", state: "IDLE", desc: "本轮未参与"}
+            ],
+            condition: [
+                {id: "C1", role: "WAITER", thread: "T1", ws: -2, wsText: "-2 (CONDITION)", nextWaiter: "null", active: true}
+            ],
+            sync: [
+                {id: "S2", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "null"}
+            ],
+            chain: [
+                "trip.await() by T2",
+                "checkInterruptWhileWaiting() -> transferAfterCancelledWait(C2) -> enq(S2)",
+                "acquireQueued(S2, savedState) 重新获取锁",
+                "reportInterruptAfterWait(THROW_IE) -> throw InterruptedException"
+            ],
+            micro: [
+                "中断线程仍遵守 Condition.await 协议：先转移再重入锁",
+                "S2 在本步首次进入 Sync Queue，并完成一次入队后重入锁",
+                "抛给 dowait 的 InterruptedException 发生在持锁状态下"
+            ],
+            cas: [
+                "CAS(C2.waitStatus, CONDITION, 0) 成功（中断转移）",
+                "CAS(tail, H, S2) 成功（S2 入 Sync Queue）",
+                "CAS(state, 0, 1) 成功（T2 重新获取锁）"
+            ],
+            delta: [
+                "Condition Queue: C1->C2 -> C1",
+                "Sync Queue: H -> H<->S2 -> S2",
+                "lockOwner: null -> T2",
+                "count 仍为 1"
+            ],
+            next: ["dowait 捕获 ie 后执行 breakBarrier，并在 finally 里释放锁"]
+        },
+        {
+            title: "12) dowait 捕获 ie：执行 breakBarrier 并 signalAll 其它等待线程",
+            summary: "T2 进入 dowait 的 catch (InterruptedException ie) 后命中 g==generation && !g.broken，执行 breakBarrier：置 broken=true，count 重置为 parties，trip.signalAll 把其它 Condition waiter 转到 Sync Queue",
+            focus: "方法焦点：catch (InterruptedException ie) -> breakBarrier()",
+            generation: "g1 / broken=true",
+            count: "3（breakBarrier 已重置）",
+            owner: "T2",
+            result: "breakBarrier 完成",
+            threads: [
+                {name: "T1", state: "READY", desc: "被 signalAll 转移到 Sync Queue，等待按序获取锁", active: true},
+                {name: "T2", state: "RUNNING", desc: "仍在 catch 内，尚未 unlock"},
+                {name: "T3", state: "IDLE", desc: "本轮未参与"}
+            ],
+            condition: [],
+            sync: [
+                {id: "S2", role: "HEAD", thread: "null", ws: -1, wsText: "-1 (SIGNAL)", mode: "DUMMY", prev: "null", next: "S1"},
+                {id: "S1", role: "TAIL", thread: "T1", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "S2", next: "null", active: true}
+            ],
+            chain: [
+                "catch (InterruptedException ie)",
+                "if (g == generation && !g.broken) breakBarrier()",
+                "generation.broken = true; count = parties",
+                "trip.signalAll() -> transferForSignal(C1)"
+            ],
+            micro: [
+                "breakBarrier 与 nextGeneration 都会 signalAll，但 breakBarrier 表示本代失败",
+                "其它等待线程会先入 Sync Queue，再按顺序获取锁",
+                "当前仍由 T2 持锁，异常尚未向上抛出"
+            ],
+            cas: [
+                "CAS(C1.waitStatus, CONDITION, 0) 成功（T1 转移）",
+                "CAS(tail, S2, S1) 成功（追加到 Sync Queue）"
+            ],
+            delta: [
+                "generation.g1.broken: false -> true",
+                "count: 1 -> 3",
+                "Condition Queue: C1 -> 空",
+                "Sync Queue: S2 -> S2<->S1"
+            ],
+            next: ["T2 离开 catch 后进入 finally unlock，再向上抛 InterruptedException"]
+        },
+        {
+            title: "13) T2 走 finally unlock：释放锁后向上抛 InterruptedException",
+            summary: "dowait 中 throw ie 会先进入 finally 执行 lock.unlock，释放锁并唤醒 Sync Queue 后继，随后 InterruptedException 才离开 CyclicBarrier.await",
+            focus: "方法焦点：dowait finally + throw ie",
+            generation: "g1 / broken=true",
+            count: "3",
+            owner: "-",
+            result: "T2 throw InterruptedException",
+            threads: [
+                {name: "T1", state: "READY", desc: "被 unpark，准备 acquireQueued(S1)", active: true},
+                {name: "T2", state: "EXCEPTION", desc: "已向调用方抛出 InterruptedException"},
+                {name: "T3", state: "IDLE", desc: "本轮未参与"}
+            ],
+            condition: [],
+            sync: [
+                {id: "S2", role: "HEAD", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "S1"},
+                {id: "S1", role: "TAIL", thread: "T1", ws: 0, wsText: "0 (NONE)", mode: "EXCLUSIVE", prev: "S2", next: "null", active: true}
+            ],
+            chain: [
+                "catch 内 throw ie",
+                "finally { lock.unlock(); }",
+                "AQS.release(1) -> unparkSuccessor(S2)",
+                "InterruptedException 离开 await()"
+            ],
+            micro: [
+                "异常路径也严格遵守先 unlock 再离开方法",
+                "T1 在 Sync Queue 上按顺序竞争锁",
+                "g1.broken=true 会影响后续等待线程的返回分支"
+            ],
+            cas: ["本步核心是 release + unpark，无新增关键 CAS"],
+            delta: [
+                "lockOwner: T2 -> null",
+                "T2: RUNNING -> EXCEPTION"
+            ],
+            next: ["其它等待线程（此处 T1）获取锁后会命中 g.broken 并抛 BrokenBarrierException"]
+        },
+        {
+            title: "14) T1 按序获取锁：从 Condition.await 返回到 dowait 循环",
+            summary: "T1 作为 signalAll 后的后继节点，从 Sync Queue 获取锁成功后才从 Condition.await 返回到 dowait for(;;)，然后继续执行屏障状态判断",
+            focus: "方法焦点：acquireQueued(S1) + await 返回",
+            generation: "g1 / broken=true",
+            count: "3",
+            owner: "T1",
+            result: "T1 已回到 dowait 循环",
+            threads: [
+                {name: "T1", state: "RUNNING", desc: "已获取锁，准备检查 g.broken", active: true},
+                {name: "T2", state: "EXCEPTION", desc: "本轮抛 InterruptedException"},
+                {name: "T3", state: "IDLE", desc: "本轮未参与"}
+            ],
+            condition: [],
+            sync: [
+                {id: "S1", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "null"}
+            ],
+            chain: [
+                "acquireQueued(S1, savedState) 成功",
+                "Condition.await() 返回到 dowait for(;;)",
+                "准备执行 if (g.broken) 判断"
+            ],
+            micro: [
+                "signalAll 不等于直接返回，必须重新获取锁",
+                "Sync Queue 头推进后收敛为单头节点",
+                "当前代 g1 仍为 broken=true"
+            ],
+            cas: ["CAS(state, 0, 1) 成功（T1 获取锁）"],
+            delta: [
+                "Sync Queue: S2<->S1 -> S1",
+                "lockOwner: null -> T1"
+            ],
+            next: ["dowait 命中 g.broken 分支，抛 BrokenBarrierException"]
+        },
+        {
+            title: "15) T1 命中 g.broken：finally unlock 后抛 BrokenBarrierException",
+            summary: "T1 在 dowait 循环中首先检查 g.broken，命中后抛 BrokenBarrierException；同样先走 finally lock.unlock，再把异常抛给调用方",
+            focus: "方法焦点：if (g.broken) throw BrokenBarrierException + finally unlock",
+            generation: "g1 / broken=true",
+            count: "3",
+            owner: "-",
+            result: "T1 throw BrokenBarrierException",
+            threads: [
+                {name: "T1", state: "EXCEPTION", desc: "已向调用方抛出 BrokenBarrierException", active: true},
+                {name: "T2", state: "EXCEPTION", desc: "本轮抛 InterruptedException"},
+                {name: "T3", state: "IDLE", desc: "可选择进入下一轮"}
+            ],
+            condition: [],
+            sync: [
+                {id: "S1", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "null"}
+            ],
+            chain: [
+                "dowait: if (g.broken) throw BrokenBarrierException",
+                "finally { lock.unlock(); }",
+                "BrokenBarrierException 离开 await()"
+            ],
+            micro: [
+                "被 signalAll 唤醒的其它等待线程会重复相同模式",
+                "顺序是 获取锁 -> 检查 broken -> finally unlock -> 抛异常",
+                "本示例的其它等待线程只有 T1"
+            ],
+            cas: ["本步无新增关键 CAS"],
+            delta: [
+                "lockOwner: T1 -> null",
+                "T1: RUNNING -> EXCEPTION"
+            ],
+            next: ["可调用 reset 清理 broken 代并恢复复用"]
+        },
+        {
+            title: "16) reset：breakBarrier + nextGeneration，进入干净的 g2",
+            summary: "业务侧调用 reset 后，CyclicBarrier 会先 breakBarrier 再 nextGeneration，最终得到 g2/broken=false，count 重置为 parties，可继续复用",
+            focus: "方法焦点：reset()",
+            generation: "g2 / broken=false",
+            count: "3（可再次复用）",
+            owner: "-",
+            result: "barrier reset 完成",
+            threads: [
+                {name: "T1", state: "IDLE", desc: "已处理 BrokenBarrierException"},
+                {name: "T2", state: "IDLE", desc: "已处理 InterruptedException"},
+                {name: "T3", state: "IDLE", desc: "可进入下一轮 await", active: true}
+            ],
+            condition: [],
+            sync: [
+                {id: "S1", role: "HEAD/TAIL", thread: "null", ws: 0, wsText: "0 (NONE)", mode: "DUMMY", prev: "null", next: "null"}
+            ],
+            chain: [
+                "业务侧调用 barrier.reset()",
+                "reset: breakBarrier(); nextGeneration();"
+            ],
+            micro: [
+                "异常代不会自动恢复，reset 用于显式重建",
+                "新一代 g2 与首轮 g0 语义一致",
+                "同一 CyclicBarrier 实例继续可复用"
+            ],
+            cas: ["reset 主要是字段切换与 signalAll，无新增关键 CAS"],
+            delta: [
+                "generation: g1(broken) -> g2(clean)",
+                "count: 3 -> 3（保持重置值）",
+                "Sync Queue 保持单头节点 S1"
+            ],
+            next: ["流程结束：可点击重置回看节点迁移细节"]
+        }
+    ];
+
+    const el = {
+        prevBtn: document.getElementById("prevBtn"),
+        nextBtn: document.getElementById("nextBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        generationValue: document.getElementById("generationValue"),
+        countValue: document.getElementById("countValue"),
+        ownerValue: document.getElementById("ownerValue"),
+        resultValue: document.getElementById("resultValue"),
+        threadLane: document.getElementById("threadLane"),
+        conditionWrap: document.getElementById("conditionWrap"),
+        syncWrap: document.getElementById("syncWrap"),
+        stepTitle: document.getElementById("stepTitle"),
+        stepSummary: document.getElementById("stepSummary"),
+        focusBox: document.getElementById("focusBox"),
+        chainList: document.getElementById("chainList"),
+        microList: document.getElementById("microList"),
+        casList: document.getElementById("casList"),
+        deltaList: document.getElementById("deltaList"),
+        nextList: document.getElementById("nextList"),
+        timeline: document.getElementById("timeline"),
+        stepCounter: document.getElementById("stepCounter"),
+        stage: document.getElementById("stage"),
+        explain: document.querySelector(".explain")
+    };
+
+    let current = 0;
+    let fixedPanelHeight = null;
+
+    function stateClass(state) {
+        const s = String(state || "").toUpperCase();
+        if (s === "RUNNING") return "b-running";
+        if (s === "READY") return "b-ready";
+        if (s === "PARKED") return "b-parked";
+        if (s === "EXCEPTION") return "b-ex";
+        return "b-idle";
+    }
+
+    function wsClass(ws) {
+        if (ws > 0) return "pos";
+        if (ws < 0) return "neg";
+        return "zero";
+    }
+
+    function flashStage() {
+        el.stage.classList.remove("flash");
+        void el.stage.offsetWidth;
+        el.stage.classList.add("flash");
+        window.setTimeout(() => el.stage.classList.remove("flash"), 220);
+    }
+
+    function renderThreads(step) {
+        el.threadLane.innerHTML = "";
+        step.threads.forEach((thread) => {
+            const item = document.createElement("article");
+            item.className = `thread${thread.active ? " active" : ""}`;
+            item.innerHTML = `
+                <div class="thread-top">
+                    <strong class="thread-name">${thread.name}</strong>
+                    <span class="badge ${stateClass(thread.state)}">${thread.state}</span>
+                </div>
+                <p>${thread.desc}</p>
+            `;
+            el.threadLane.appendChild(item);
+        });
+    }
+
+    function renderConditionQueue(step) {
+        el.conditionWrap.innerHTML = "";
+        const nodes = step.condition || [];
+
+        if (nodes.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "queue-empty";
+            empty.textContent = "Condition Queue 为空（没有线程在 trip.await 上等待）";
+            el.conditionWrap.appendChild(empty);
+            return;
+        }
+
+        const forward = document.createElement("div");
+        forward.className = "queue-forward";
+
+        nodes.forEach((node, index) => {
+            const card = document.createElement("article");
+            const classes = ["node", "condition"];
+            if (node.active) classes.push("active");
+            card.className = classes.join(" ");
+
+            const wsText = node.wsText !== undefined ? node.wsText : String(node.ws);
+
+            card.innerHTML = `
+                <div class="node-top">
+                    <span class="node-title">${node.id}</span>
+                    <span class="node-role">${node.role || "WAITER"}</span>
+                </div>
+                <div class="node-line"><span class="label">thread:</span> ${node.thread}</div>
+                <div class="node-line"><span class="label">waitStatus:</span> <span class="ws ${wsClass(node.ws)}">${wsText}</span></div>
+                <div class="node-line"><span class="label">nextWaiter:</span> ${node.nextWaiter}</div>
+            `;
+            forward.appendChild(card);
+
+            if (index < nodes.length - 1) {
+                const arrow = document.createElement("span");
+                arrow.className = "arrow";
+                arrow.textContent = "→";
+                forward.appendChild(arrow);
+            }
+        });
+
+        el.conditionWrap.appendChild(forward);
+
+        const pointer = document.createElement("div");
+        pointer.className = "pointer-panel";
+
+        const title = document.createElement("div");
+        title.className = "pointer-title";
+        title.textContent = "Condition 指针快照";
+        pointer.appendChild(title);
+
+        const first = document.createElement("div");
+        first.className = "pointer-line";
+        first.textContent = `firstWaiter=${nodes[0].id}`;
+        pointer.appendChild(first);
+
+        const last = document.createElement("div");
+        last.className = "pointer-line";
+        last.textContent = `lastWaiter=${nodes[nodes.length - 1].id}`;
+        pointer.appendChild(last);
+
+        nodes.forEach((node) => {
+            const line = document.createElement("div");
+            line.className = "pointer-line";
+            line.textContent = `${node.id}.nextWaiter=${node.nextWaiter}`;
+            pointer.appendChild(line);
+        });
+
+        el.conditionWrap.appendChild(pointer);
+    }
+
+    function buildBackwardChain(nodes) {
+        if (!nodes || nodes.length === 0) return "(空)";
+        return nodes.slice().reverse().map((n) => n.id).join(" -> ");
+    }
+
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    }
+
+    function formatDeltaLine(line) {
+        const escaped = escapeHtml(line);
+        if (!line.includes("Queue:")) return escaped;
+        return escaped.replace(/\s-&gt;\s/g, ' <span class="queue-change-arrow">-&gt;</span> ');
+    }
+
+    function renderSyncQueue(step) {
+        el.syncWrap.innerHTML = "";
+        const nodes = step.sync || [];
+
+        if (nodes.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "queue-empty";
+            empty.textContent = "Sync Queue 为空（当前无锁竞争排队）";
+            el.syncWrap.appendChild(empty);
+            return;
+        }
+
+        const forward = document.createElement("div");
+        forward.className = "queue-forward";
+
+        nodes.forEach((node, index) => {
+            const card = document.createElement("article");
+            const classes = ["node"];
+            if (String(node.role || "").includes("HEAD")) classes.push("head");
+            if (node.ws > 0) classes.push("cancelled");
+            if (node.active) classes.push("active");
+            card.className = classes.join(" ");
+
+            const wsText = node.wsText !== undefined ? node.wsText : String(node.ws);
+
+            card.innerHTML = `
+                <div class="node-top">
+                    <span class="node-title">${node.id}</span>
+                    <span class="node-role">${node.role || "NODE"}</span>
+                </div>
+                <div class="node-line"><span class="label">thread:</span> ${node.thread}</div>
+                <div class="node-line"><span class="label">waitStatus:</span> <span class="ws ${wsClass(node.ws)}">${wsText}</span></div>
+                <div class="node-line"><span class="label">mode:</span> ${node.mode}</div>
+                <div class="node-line"><span class="label">prev:</span> ${node.prev}</div>
+                <div class="node-line"><span class="label">next:</span> ${node.next}</div>
+            `;
+            forward.appendChild(card);
+
+            if (index < nodes.length - 1) {
+                const arrow = document.createElement("span");
+                arrow.className = "arrow";
+                arrow.textContent = "→";
+                forward.appendChild(arrow);
+            }
+        });
+
+        el.syncWrap.appendChild(forward);
+
+        const pointer = document.createElement("div");
+        pointer.className = "pointer-panel";
+
+        const title1 = document.createElement("div");
+        title1.className = "pointer-title";
+        title1.textContent = "Sync 指针快照";
+        pointer.appendChild(title1);
+
+        const headNode = nodes.find((n) => String(n.role || "").includes("HEAD")) || nodes[0];
+        const tailNode = nodes.find((n) => String(n.role || "").includes("TAIL")) || nodes[nodes.length - 1];
+
+        const line1 = document.createElement("div");
+        line1.className = "pointer-line";
+        line1.textContent = `head=${headNode.id}`;
+        pointer.appendChild(line1);
+
+        const line2 = document.createElement("div");
+        line2.className = "pointer-line";
+        line2.textContent = `tail=${tailNode.id}`;
+        pointer.appendChild(line2);
+
+        nodes.forEach((node) => {
+            const line = document.createElement("div");
+            line.className = "pointer-line";
+            line.textContent = `${node.id}.prev=${node.prev}, ${node.id}.next=${node.next}`;
+            pointer.appendChild(line);
+        });
+
+        const title2 = document.createElement("div");
+        title2.className = "pointer-title";
+        title2.textContent = "反向遍历（tail -> head）";
+        pointer.appendChild(title2);
+
+        const backward = document.createElement("div");
+        backward.className = "pointer-line";
+        backward.textContent = buildBackwardChain(nodes);
+        pointer.appendChild(backward);
+
+        el.syncWrap.appendChild(pointer);
+    }
+
+    function renderList(target, lines, emptyText) {
+        target.innerHTML = "";
+        if (!lines || lines.length === 0) {
+            const li = document.createElement("li");
+            li.className = "empty";
+            li.textContent = emptyText;
+            target.appendChild(li);
+            return;
+        }
+
+        lines.forEach((line) => {
+            const li = document.createElement("li");
+            if (target === el.deltaList) {
+                li.innerHTML = formatDeltaLine(line);
+            } else {
+                li.textContent = line;
+            }
+            target.appendChild(li);
+        });
+    }
+
+    function renderTimeline() {
+        el.timeline.innerHTML = "";
+        steps.forEach((step, index) => {
+            const chip = document.createElement("button");
+            chip.type = "button";
+            const classes = ["step-chip"];
+            if (index < current) classes.push("done");
+            if (index === current) classes.push("active");
+            chip.className = classes.join(" ");
+            chip.textContent = step.title.replace(/^\d+\)\s*/, "");
+            chip.addEventListener("click", () => {
+                current = index;
+                render(true);
+            });
+            el.timeline.appendChild(chip);
+        });
+    }
+
+    function render(animate) {
+        const step = steps[current];
+
+        el.generationValue.textContent = step.generation;
+        el.countValue.textContent = step.count;
+        el.ownerValue.textContent = step.owner;
+        el.resultValue.textContent = step.result;
+
+        renderThreads(step);
+        renderConditionQueue(step);
+        renderSyncQueue(step);
+
+        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepSummary.textContent = step.summary;
+        el.focusBox.textContent = step.focus;
+
+        renderList(el.chainList, step.chain, "暂无调用链");
+        renderList(el.microList, step.micro, "暂无细节点");
+        renderList(el.casList, step.cas, "本步无 CAS");
+        renderList(el.deltaList, step.delta, "本步无字段变化");
+        renderList(el.nextList, step.next, "流程结束");
+
+        renderTimeline();
+        el.stepCounter.textContent = `第 ${current + 1} / ${steps.length} 步`;
+
+        el.prevBtn.disabled = current === 0;
+        el.nextBtn.disabled = current === steps.length - 1;
+
+        if (fixedPanelHeight !== null) {
+            const h = `${fixedPanelHeight}px`;
+            el.stage.style.height = h;
+            el.explain.style.height = h;
+        }
+
+        if (animate) flashStage();
+    }
+
+    function computeFixedPanelHeight() {
+        const savedCurrent = current;
+
+        fixedPanelHeight = null;
+        el.stage.style.height = "auto";
+        el.explain.style.height = "auto";
+
+        let maxStage = 0;
+        let maxExplain = 0;
+
+        for (let i = 0; i < steps.length; i += 1) {
+            current = i;
+            render(false);
+            maxStage = Math.max(maxStage, el.stage.scrollHeight);
+            maxExplain = Math.max(maxExplain, el.explain.scrollHeight);
+        }
+
+        fixedPanelHeight = Math.max(maxStage, maxExplain);
+        current = savedCurrent;
+    }
+
+    function prev() {
+        if (current > 0) {
+            current -= 1;
+            render(true);
+        }
+    }
+
+    function next() {
+        if (current < steps.length - 1) {
+            current += 1;
+            render(true);
+        }
+    }
+
+    el.prevBtn.addEventListener("click", prev);
+    el.nextBtn.addEventListener("click", next);
+    el.resetBtn.addEventListener("click", () => {
+        current = 0;
+        render(true);
+    });
+
+    window.addEventListener("keydown", (event) => {
+        const target = event.target;
+        const tag = target && target.tagName ? target.tagName.toUpperCase() : "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (target && target.isContentEditable)) {
+            return;
+        }
+
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            prev();
+        } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            next();
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            current = 0;
+            render(true);
+        }
+    });
+
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(() => {
+            computeFixedPanelHeight();
+            render(false);
+        }, 120);
+    });
+
+    render(false);
+    computeFixedPanelHeight();
+    render(false);
+})();
+</script>
+</body>
+</html>
