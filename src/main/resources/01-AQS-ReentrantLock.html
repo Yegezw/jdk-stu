@@ -6,18 +6,25 @@
     <title>AQS 独占模式（ReentrantLock）全细节流程图</title>
     <style>
         :root {
-            --bg: #f8fafc;
-            --card: #ffffff;
-            --soft: #f1f5f9;
-            --line: #dbe3ef;
-            --text: #0f172a;
-            --muted: #475569;
+            --bg: #f6f7f9;
+            --surface: #ffffff;
+            --surface-soft: #f8fafc;
+            --line: #d8e0ec;
+            --line-strong: #b9c6d8;
+            --text: #111827;
+            --muted: #5f6b7a;
             --blue: #2563eb;
-            --violet: #7c3aed;
-            --green: #16a34a;
-            --orange: #ea580c;
+            --blue-soft: #eef5ff;
+            --green: #15803d;
+            --green-soft: #ecfdf3;
+            --orange: #c2410c;
+            --orange-soft: #fff4e6;
             --red: #dc2626;
-            --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+            --red-soft: #fff1f2;
+            --violet: #6d28d9;
+            --violet-soft: #f5f3ff;
+            --shadow: 0 8px 22px rgba(17, 24, 39, 0.07);
+            --radius: 8px;
         }
 
         * {
@@ -27,91 +34,100 @@
         body {
             margin: 0;
             font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
-            background: linear-gradient(165deg, #eaf2ff 0%, var(--bg) 56%);
+            background: var(--bg);
             color: var(--text);
-            line-height: 1.56;
+            line-height: 1.5;
+        }
+
+        button {
+            font: inherit;
         }
 
         .app {
-            width: min(1360px, calc(100vw - 20px));
-            margin: 12px auto 26px;
+            width: min(1540px, calc(100vw - 24px));
+            min-width: 1420px;
+            height: 100vh;
+            margin: 0 auto;
+            padding: 12px 0 18px;
             display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
             gap: 10px;
+            overflow: hidden;
         }
 
         .app > *,
-        .layout > *,
+        .topbar > *,
+        .workspace > *,
         .stage > * {
             min-width: 0;
         }
 
-        .card {
-            background: var(--card);
+        .topbar,
+        .timeline-panel,
+        .stage,
+        .explain {
+            background: var(--surface);
             border: 1px solid var(--line);
-            border-radius: 14px;
+            border-radius: var(--radius);
             box-shadow: var(--shadow);
         }
 
+        .topbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+        }
+
         .hero {
-            padding: 14px 16px;
+            display: grid;
+            gap: 4px;
+        }
+
+        .eyebrow {
+            margin: 0;
+            color: var(--blue);
+            font-size: 12px;
+            font-weight: 800;
         }
 
         .hero h1 {
             margin: 0;
-            font-size: clamp(22px, 2.6vw, 31px);
-            line-height: 1.26;
+            font-size: 24px;
+            line-height: 1.25;
         }
 
         .hero p {
-            margin: 7px 0 0;
+            margin: 0;
             color: var(--muted);
             font-size: 13px;
         }
 
-        .hero .tip {
-            margin-top: 8px;
-            padding: 7px 10px;
-            background: var(--soft);
-            border: 1px solid #d6e2f6;
-            border-radius: 9px;
-            font-size: 12px;
-            color: #334155;
-        }
-
         .controls {
-            padding: 10px;
             display: flex;
             flex-wrap: wrap;
+            justify-content: flex-end;
             align-items: center;
             gap: 8px;
         }
 
-        .model-pill {
-            border: 1px solid #bfdbfe;
-            background: #eff6ff;
-            color: #1e3a8a;
-            border-radius: 999px;
-            padding: 6px 10px;
-            font-size: 12px;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-
         .btn {
-            border: 1px solid #c8d5ea;
+            min-height: 34px;
+            border: 1px solid var(--line-strong);
             background: #ffffff;
-            color: #1e293b;
-            border-radius: 9px;
-            padding: 7px 11px;
+            color: #243044;
+            border-radius: var(--radius);
+            padding: 6px 10px;
             font-size: 13px;
-            font-weight: 700;
+            font-weight: 800;
             cursor: pointer;
-            transition: 0.18s ease;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
         }
 
         .btn:hover {
-            border-color: #93c5fd;
-            background: #eff6ff;
+            border-color: #93b5e8;
+            background: var(--blue-soft);
             color: #1d4ed8;
         }
 
@@ -122,65 +138,343 @@
         }
 
         .btn:disabled {
-            opacity: 0.55;
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
-        .control-note {
-            margin-left: auto;
-            color: #64748b;
+        .model-pill,
+        .control-note,
+        .counter-pill {
+            border-radius: var(--radius);
+            padding: 6px 9px;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 800;
         }
 
-        .layout {
+        .model-pill {
+            border: 1px solid #bdd3f5;
+            background: var(--blue-soft);
+            color: #1e3a8a;
+        }
+
+        .control-note {
+            color: #64748b;
+            background: var(--surface-soft);
+            border: 1px solid #e2e8f0;
+        }
+
+        .counter-pill {
+            color: #36506f;
+            background: #f0f6ff;
+            border: 1px solid #c8daf5;
+            white-space: nowrap;
+        }
+
+        .workspace {
             display: grid;
-            grid-template-columns: 1.45fr 1fr;
+            grid-template-columns: 240px minmax(760px, 1fr) 370px;
+            grid-template-areas: "timeline stage explain";
             gap: 10px;
-            align-items: start;
+            align-items: stretch;
+            min-height: 0;
+        }
+
+        .timeline-panel,
+        .stage,
+        .explain {
+            height: auto;
+            min-height: 0;
+            max-height: none;
+        }
+
+        .timeline-panel {
+            grid-area: timeline;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            overflow: hidden;
+        }
+
+        .timeline-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            padding: 10px 10px 8px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .timeline-head h2 {
+            margin: 0;
+            font-size: 14px;
+            color: #243044;
+        }
+
+        .timeline-head span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .timeline {
+            counter-reset: step;
+            display: grid;
+            align-content: start;
+            gap: 7px;
+            padding: 10px;
+            overflow: auto;
+        }
+
+        .timeline-group {
+            margin: 7px 0 1px;
+            border: 1px solid #dce4ef;
+            border-radius: var(--radius);
+            background: #f8fafc;
+            color: #475569;
+            padding: 5px 8px;
+            font-size: 11px;
+            font-weight: 900;
+        }
+
+        .timeline-group.done {
+            border-color: #b7e4c4;
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .timeline-group.active {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .step-chip {
+            counter-increment: step;
+            width: 100%;
+            min-height: 68px;
+            border: 1px solid #d1dae8;
+            background: #ffffff;
+            color: #334155;
+            border-radius: var(--radius);
+            padding: 8px 9px;
+            display: grid;
+            grid-template-columns: 32px minmax(0, 1fr);
+            gap: 8px;
+            align-items: center;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .step-chip::before {
+            content: counter(step);
+            width: 30px;
+            height: 30px;
+            display: grid;
+            place-items: center;
+            border-radius: 999px;
+            background: #e9eef6;
+            color: #475569;
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .step-chip:hover {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .step-chip.done {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .step-chip.done::before {
+            background: #d9f7e3;
+            color: var(--green);
+        }
+
+        .step-chip.active {
+            border-color: #1d4ed8;
+            background: #1d4ed8;
+            color: #ffffff;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+        }
+
+        .step-chip.active::before {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+        }
+
+        .step-chip-title,
+        .step-chip-phase {
+            min-width: 0;
+        }
+
+        .step-chip-copy {
+            display: grid;
+            gap: 3px;
+            align-self: center;
+            min-width: 0;
+            line-height: 1.34;
+        }
+
+        .step-chip-title {
+            overflow-wrap: anywhere;
+        }
+
+        .step-chip-phase {
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 800;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .step-chip.done .step-chip-phase {
+            color: #15803d;
+        }
+
+        .step-chip.active .step-chip-phase {
+            color: rgba(255, 255, 255, 0.76);
         }
 
         .stage {
+            grid-area: stage;
             padding: 10px;
             display: grid;
-            grid-template-rows: auto 196px minmax(0, 1fr);
+            grid-template-rows: auto auto auto minmax(0, 1fr);
             gap: 8px;
-            transition: box-shadow 0.18s ease, border-color 0.18s ease;
-            align-content: start;
+            overflow: hidden;
+            transition: box-shadow 0.16s ease, border-color 0.16s ease;
         }
 
         .stage.flash {
-            border-color: #93c5fd;
+            border-color: #93b5e8;
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13), var(--shadow);
+        }
+
+        .step-context {
+            height: 62px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .context-card {
+            height: 62px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 7px 8px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            align-content: start;
+            overflow: hidden;
+            transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .context-card span {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .context-card strong {
+            display: block;
+            margin-top: 4px;
+            color: #111827;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        .context-value {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stage[data-effect="cas"] .context-action,
+        .stage[data-effect="signal"] .context-action {
+            border-color: #93c5fd;
+            background: var(--blue-soft);
+        }
+
+        .stage[data-effect="write"] .context-action {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+        }
+
+        .stage[data-effect="miss"] .context-action {
+            border-color: #c7d2e3;
+            background: var(--surface-soft);
+        }
+
+        .stage[data-effect="enqueue"] .context-action,
+        .stage[data-effect="sethead"] .context-action {
+            border-color: #c4b5fd;
+            background: var(--violet-soft);
+        }
+
+        .stage[data-effect="park"] .context-action,
+        .stage[data-effect="unpark"] .context-action {
+            border-color: #fed7aa;
+            background: var(--orange-soft);
+        }
+
+        .stage[data-effect="exception"] .context-action {
+            border-color: #fca5a5;
+            background: var(--red-soft);
+        }
+
+        .stage[data-effect="complete"] .context-action {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+        }
+
+        .stage[data-effect="cas"] .status-state,
+        .stage[data-effect="write"] .status-state,
+        .stage[data-effect="unpark"] .status-state,
+        .stage[data-effect="sethead"] .status-state {
+            border-color: #93c5fd;
+            background: #f0f6ff;
         }
 
         .status-grid {
             display: grid;
-            grid-template-columns: 180px 190px minmax(0, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 7px;
         }
 
         .status {
+            min-height: 62px;
             border: 1px solid var(--line);
-            border-radius: 10px;
-            background: #f8fbff;
-            padding: 7px;
-            height: 72px;
+            border-radius: var(--radius);
+            background: var(--surface-soft);
+            padding: 7px 8px;
             overflow: hidden;
         }
 
         .status span {
             display: block;
+            color: var(--muted);
             font-size: 11px;
-            color: #64748b;
+            font-weight: 700;
         }
 
         .status strong {
             display: block;
             margin-top: 4px;
+            color: #111827;
             font-size: 13px;
-            line-height: 1.36;
-            color: #0f172a;
+            line-height: 1.35;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -189,49 +483,47 @@
         .status-state strong {
             font-family: Menlo, Consolas, monospace;
             font-variant-numeric: tabular-nums;
-            min-width: 5ch;
-            text-align: left;
         }
 
         .lane {
+            min-height: 0;
             border: 1px solid var(--line);
-            border-radius: 10px;
+            border-radius: var(--radius);
             background: #fcfdff;
             padding: 8px;
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 7px;
         }
 
         .lane h3 {
-            margin: 0 0 7px;
-            font-size: 13px;
+            margin: 0;
             color: #334155;
+            font-size: 13px;
         }
 
         .lane-threads {
-            min-height: 196px;
+            min-height: 120px;
         }
 
         .lane-queue {
-            min-height: 560px;
+            overflow: hidden;
         }
 
         .threads {
             display: grid;
-            gap: 7px;
-            grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             grid-auto-rows: 76px;
-            align-content: start;
-            flex: 1;
+            gap: 7px;
         }
 
         .thread {
-            border: 1px solid #d9e3f2;
-            border-radius: 9px;
+            height: 76px;
+            border: 1px solid #d8e0ec;
+            border-radius: var(--radius);
             background: #ffffff;
             padding: 7px;
-            height: 76px;
-            transition: 0.18s ease;
+            overflow: hidden;
         }
 
         .thread.active {
@@ -247,16 +539,15 @@
         }
 
         .thread-name {
-            font-weight: 700;
             font-size: 12px;
+            font-weight: 800;
         }
 
         .badge {
             border-radius: 999px;
             padding: 2px 7px;
             font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.3px;
+            font-weight: 800;
         }
 
         .b-running {
@@ -270,12 +561,12 @@
         }
 
         .b-parked {
-            background: #ffedd5;
+            background: var(--orange-soft);
             color: #9a3412;
         }
 
         .b-idle {
-            background: #e2e8f0;
+            background: #e5e9f0;
             color: #475569;
         }
 
@@ -286,53 +577,88 @@
 
         .thread p {
             margin: 6px 0 0;
-            font-size: 11px;
             color: #475569;
+            font-size: 11px;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
         }
 
         .queue-wrap {
+            min-height: 0;
             display: grid;
-            grid-template-rows: auto auto;
-            gap: 6px;
+            gap: 8px;
             align-content: start;
+            overflow: auto;
+            padding-right: 2px;
         }
 
         .queue-empty {
-            border: 1px dashed #cbd5e1;
-            border-radius: 8px;
-            padding: 7px 9px;
-            font-size: 12px;
-            color: #64748b;
-            background: #f8fafc;
-            min-height: 100%;
-            display: flex;
-            align-items: center;
+            min-height: 156px;
+            border: 1px dashed #c7d2e3;
+            border-radius: var(--radius);
+            padding: 10px;
+            display: grid;
+            place-content: center;
+            gap: 4px;
+            background: var(--surface-soft);
+            text-align: center;
         }
 
-        .queue-forward {
+        .queue-empty strong {
+            color: #334155;
+            font-size: 13px;
+        }
+
+        .queue-empty span {
+            color: var(--muted);
+            font-family: Menlo, Consolas, monospace;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .queue-chain {
             display: flex;
             flex-wrap: wrap;
-            gap: 7px;
+            gap: 8px;
             align-items: center;
             align-content: flex-start;
             min-height: 0;
         }
 
-        .arrow {
-            color: #94a3b8;
-            font-size: 15px;
-            font-weight: 700;
-            line-height: 1;
+        .link-pair {
+            width: 46px;
+            display: grid;
+            gap: 4px;
+            justify-items: center;
+            align-content: center;
+            color: #64748b;
             user-select: none;
         }
 
+        .link-arrow {
+            display: block;
+            font-size: 23px;
+            font-weight: 900;
+            line-height: 0.82;
+            letter-spacing: 0;
+        }
+
         .node {
-            width: 188px;
+            width: 190px;
             border: 1px solid #d2dceb;
-            border-radius: 10px;
+            border-radius: var(--radius);
             background: #ffffff;
-            padding: 7px;
-            transition: 0.18s ease;
+            padding: 8px;
+        }
+
+        .node.head {
+            border-color: #a78bfa;
+            background: var(--violet-soft);
+        }
+
+        .node.cancelled {
+            border-color: #fca5a5;
+            background: var(--red-soft);
         }
 
         .node.active {
@@ -340,44 +666,34 @@
             box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
         }
 
-        .node.head {
-            border-color: #a78bfa;
-            background: #f8f5ff;
-        }
-
-        .node.cancelled {
-            border-color: #fca5a5;
-            background: #fff1f2;
-        }
-
         .node-top {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 5px;
-            margin-bottom: 5px;
+            gap: 6px;
+            margin-bottom: 6px;
         }
 
         .node-title {
+            color: #111827;
             font-size: 12px;
-            font-weight: 700;
-            color: #0f172a;
+            font-weight: 900;
         }
 
         .node-role {
-            font-size: 10px;
             border-radius: 999px;
             padding: 1px 6px;
-            background: #e2e8f0;
+            background: #e5e9f0;
             color: #334155;
-            font-weight: 700;
+            font-size: 10px;
+            font-weight: 900;
             text-transform: uppercase;
         }
 
         .node-line {
-            font-size: 11px;
-            color: #334155;
             margin: 1px 0;
+            color: #334155;
+            font-size: 11px;
         }
 
         .node-line .label {
@@ -385,7 +701,7 @@
         }
 
         .ws {
-            font-weight: 700;
+            font-weight: 900;
         }
 
         .ws.neg {
@@ -397,73 +713,51 @@
         }
 
         .ws.pos {
-            color: #dc2626;
-        }
-
-        .pointer-panel {
-            border: 1px solid #dbe3ef;
-            border-radius: 8px;
-            background: #f8fafc;
-            padding: 7px 7px 10px;
-            display: grid;
-            gap: 5px;
-            min-height: 132px;
-            align-content: start;
-        }
-
-        .pointer-title {
-            font-size: 11px;
-            font-weight: 700;
-            color: #334155;
-        }
-
-        .pointer-line {
-            font-family: Menlo, Consolas, monospace;
-            font-size: 11px;
-            color: #1f2937;
-            line-height: 1.45;
+            color: var(--red);
         }
 
         .explain {
+            grid-area: explain;
             padding: 10px;
             display: grid;
-            gap: 8px;
             align-content: start;
+            gap: 8px;
+            overflow: auto;
         }
 
         .explain h2 {
             margin: 0;
-            font-size: 19px;
-            line-height: 1.34;
+            font-size: 18px;
+            line-height: 1.32;
         }
 
         .explain .summary {
             margin: 0;
-            font-size: 13px;
             color: var(--muted);
+            font-size: 13px;
         }
 
         .focus-box {
-            border: 1px solid #bfdbfe;
-            background: #eff6ff;
+            border: 1px solid #bdd3f5;
+            border-radius: var(--radius);
+            background: var(--blue-soft);
             color: #1e3a8a;
-            border-radius: 9px;
             padding: 7px 8px;
             font-size: 12px;
-            font-weight: 700;
+            font-weight: 800;
         }
 
         .detail {
-            border: 1px solid #dbe3ef;
-            border-radius: 9px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
             background: #ffffff;
-            padding: 7px;
+            padding: 8px;
         }
 
         .detail h3 {
             margin: 0 0 6px;
-            font-size: 12px;
             color: #334155;
+            font-size: 12px;
         }
 
         .detail ul {
@@ -476,133 +770,22 @@
 
         .detail li {
             border: 1px solid #e2e8f0;
-            border-radius: 7px;
-            background: #f8fafc;
+            border-radius: 6px;
+            background: var(--surface-soft);
             padding: 5px 7px;
-            font-size: 12px;
             color: #334155;
+            font-size: 12px;
             line-height: 1.45;
         }
 
         .detail li.empty {
-            color: #64748b;
+            color: var(--muted);
             border-style: dashed;
         }
 
-        .timeline-card {
-            padding: 10px;
-        }
-
-        .timeline-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            gap: 8px;
-            margin-bottom: 7px;
-        }
-
-        .timeline-head h3 {
-            margin: 0;
-            font-size: 13px;
-            color: #334155;
-        }
-
-        .timeline-head span {
-            font-size: 12px;
-            color: #64748b;
-        }
-
-        .timeline {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 7px;
-            min-height: 74px;
-        }
-
-        .step-chip {
-            border: 1px solid #cbd5e1;
-            border-radius: 9px;
-            background: #ffffff;
-            color: #334155;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 6px 8px;
-            cursor: pointer;
-            transition: 0.18s ease;
-        }
-
-        .step-chip:hover {
-            border-color: #93c5fd;
-            background: #eff6ff;
-            color: #1d4ed8;
-        }
-
-        .step-chip.done {
-            border-color: #86efac;
-            background: #f0fdf4;
-            color: #166534;
-        }
-
-        .step-chip.active {
-            border-color: #1d4ed8;
-            background: linear-gradient(120deg, #2563eb, #1d4ed8);
-            color: #ffffff;
-        }
-
         .note {
+            color: var(--muted);
             font-size: 12px;
-            color: #64748b;
-        }
-
-        @media (max-width: 1120px) {
-            .layout {
-                grid-template-columns: 1fr;
-            }
-
-            .stage {
-                grid-template-rows: auto auto auto;
-            }
-
-            .lane-threads,
-            .lane-queue {
-                min-height: 0;
-            }
-        }
-
-        @media (max-width: 760px) {
-            .app {
-                width: calc(100% - 10px);
-                margin-top: 6px;
-            }
-
-            .status-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .node {
-                width: 100%;
-            }
-
-            .queue-forward {
-                display: grid;
-                gap: 6px;
-            }
-
-            .arrow {
-                transform: rotate(90deg);
-                justify-self: center;
-            }
-
-            .control-note {
-                margin-left: 0;
-                width: 100%;
-            }
-
-            .model-pill {
-                width: 100%;
-                white-space: normal;
-                border-radius: 10px;
-            }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -615,22 +798,44 @@
 </head>
 <body>
 <div class="app">
-    <section class="hero card">
-        <h1>AQS 独占模式全细节流程图（以 ReentrantLock 为实现）</h1>
-        <p>单线程持锁、可重入、竞争入队、park/unpark、setHead、最终释放，以及非法 unlock 分支都按 “方法内细节点” 拆开展示</p>
-        <p class="tip">Sync Queue 明确按双向链表展示：每个节点都显示 <strong>prev</strong> 和 <strong>next</strong> 两个指针</p>
-    </section>
+    <header class="topbar">
+        <section class="hero" aria-labelledby="pageTitle">
+            <p class="eyebrow">ReentrantLock.NonfairSync + AQS 独占模式</p>
+            <h1 id="pageTitle">AQS 独占模式全细节流程图</h1>
+            <p>按源码单步调试视角展示 state、owner、Sync Queue、park / unpark 和 setHead 的同一时刻快照</p>
+        </section>
 
-    <section class="controls card" aria-label="流程控制">
-        <button id="prevBtn" class="btn" type="button">⏮ 上一步</button>
-        <button id="nextBtn" class="btn" type="button">⏭ 下一步</button>
-        <button id="resetBtn" class="btn" type="button">↺ 重置</button>
-        <div class="model-pill">演示模型：ReentrantLock.NonfairSync + AQS 独占</div>
-        <div class="control-note">快捷键：← 上一步，→ 下一步，Home 重置</div>
-    </section>
+        <section class="controls" aria-label="流程控制">
+            <button id="prevBtn" class="btn" type="button">上一步</button>
+            <button id="nextBtn" class="btn" type="button">下一步</button>
+            <button id="resetBtn" class="btn" type="button">重置</button>
+            <div class="counter-pill" id="stepCounter">-</div>
+            <div class="model-pill">Java 8 / NonfairSync / EXCLUSIVE</div>
+            <div class="control-note">快捷键：← / → / Home</div>
+        </section>
+    </header>
 
-    <section class="layout">
-        <article id="stage" class="stage card" aria-live="off">
+    <main class="workspace">
+        <nav class="timeline-panel" aria-labelledby="timelineTitle">
+            <div class="timeline-head">
+                <h2 id="timelineTitle">源码步骤</h2>
+                <span>可点击跳转</span>
+            </div>
+            <div id="timeline" class="timeline"></div>
+        </nav>
+
+        <article id="stage" class="stage" aria-live="off">
+            <section class="step-context" aria-label="当前步骤机制">
+                <div class="context-card context-action">
+                    <span>当前动作</span>
+                    <strong id="actionValue" class="context-value">-</strong>
+                </div>
+                <div class="context-card context-invariant">
+                    <span>机制不变量</span>
+                    <strong id="invariantValue" class="context-value">-</strong>
+                </div>
+            </section>
+
             <div class="status-grid">
                 <div class="status status-state">
                     <span>state（重入计数）</span>
@@ -640,24 +845,20 @@
                     <span>独占持有者</span>
                     <strong id="ownerValue">-</strong>
                 </div>
-                <div class="status">
-                    <span>队列摘要</span>
-                    <strong id="queueValue">-</strong>
-                </div>
             </div>
 
-            <section class="lane lane-threads">
-                <h3>线程状态</h3>
+            <section class="lane lane-threads" aria-labelledby="threadLaneTitle">
+                <h3 id="threadLaneTitle">线程泳道</h3>
                 <div id="threadLane" class="threads"></div>
             </section>
 
-            <section class="lane lane-queue">
-                <h3>Sync Queue（双向链表，prev/next）</h3>
+            <section class="lane lane-queue" aria-labelledby="queueLaneTitle">
+                <h3 id="queueLaneTitle">Sync Queue：双向链表</h3>
                 <div id="queueWrap" class="queue-wrap"></div>
             </section>
         </article>
 
-        <aside class="explain card">
+        <aside class="explain" aria-labelledby="stepTitle">
             <h2 id="stepTitle">-</h2>
             <p id="stepSummary" class="summary">-</p>
             <div id="focusBox" class="focus-box">-</div>
@@ -687,17 +888,9 @@
                 <ul id="nextList"></ul>
             </section>
 
-            <div class="note">说明：这是教学化 “逐指令” 视图，专注 NonfairSync 主路径和关键分支</div>
+            <div class="note">教学化逐指令视图，专注 NonfairSync 主路径和关键分支</div>
         </aside>
-    </section>
-
-    <section class="timeline-card card">
-        <div class="timeline-head">
-            <h3>完整时间线（可点击跳转）</h3>
-            <span id="stepCounter">-</span>
-        </div>
-        <div id="timeline" class="timeline"></div>
-    </section>
+    </main>
 </div>
 
 <script>
@@ -707,9 +900,14 @@
             title: "1) T1 第一次 lock()：fast path 直接成功",
             summary: "ReentrantLock.lock() 进入 NonfairSync.lock()，CAS(state, 0->1) 成功，直接设置 owner=T1，不走队列",
             focus: "方法焦点：NonfairSync.lock + compareAndSetState + setExclusiveOwnerThread",
+            group: "获取入口",
+            groupKey: "acquire",
+            phase: "快路径抢占",
+            action: "CAS state 0->1，随后写 owner=T1",
+            invariant: "队列为空；owner 只在 CAS 成功后写入",
+            effect: "cas",
             state: "1",
             owner: "T1",
-            queueSummary: "Sync Queue 空",
             threads: [
                 {name: "T1", state: "RUNNING", desc: "调用 lock() 并拿到锁", active: true},
                 {name: "T2", state: "IDLE", desc: "未参与"},
@@ -744,9 +942,14 @@
             title: "2) T1 第二次 lock()：可重入路径",
             summary: "T1 再次 lock，NonfairSync.lock 的 CAS(0->1) 失败，转 acquire(1)->tryAcquire->nonfairTryAcquire，可重入成功",
             focus: "方法焦点：acquire(1) + nonfairTryAcquire(重入分支)",
+            group: "获取入口",
+            groupKey: "acquire",
+            phase: "重入计数",
+            action: "owner 命中后普通写 state++",
+            invariant: "state 表示重入次数，不表示队列长度",
+            effect: "write",
             state: "2",
             owner: "T1",
-            queueSummary: "仍无等待节点",
             threads: [
                 {name: "T1", state: "RUNNING", desc: "同线程重入成功", active: true},
                 {name: "T2", state: "IDLE", desc: "未参与"},
@@ -781,9 +984,14 @@
             title: "3) T2 调用 lock()：fast path 失败，转慢路径",
             summary: "T2 进入 NonfairSync.lock，CAS(0->1) 失败后调用 acquire(1)",
             focus: "方法焦点：NonfairSync.lock -> acquire(1)",
+            group: "获取入口",
+            groupKey: "acquire",
+            phase: "竞争入口",
+            action: "fast path CAS 失败，进入 acquire 慢路径",
+            invariant: "CAS 失败不改变 state、owner 或队列",
+            effect: "miss",
             state: "2",
             owner: "T1",
-            queueSummary: "准备入队",
             threads: [
                 {name: "T1", state: "RUNNING", desc: "仍持有锁"},
                 {name: "T2", state: "RUNNING", desc: "进入 acquire 慢路径", active: true},
@@ -817,9 +1025,14 @@
             title: "4) T2 addWaiter/enq：创建双向链表",
             summary: "tryAcquire 失败后，T2 创建 EXCLUSIVE 节点 N2，队列为空时 enq 先创建虚拟 head(H)，再把 N2 挂到 tail",
             focus: "方法焦点：addWaiter(EXCLUSIVE) + enq(node)",
+            group: "入队阻塞",
+            groupKey: "queue",
+            phase: "入队初始化",
+            action: "创建 dummy head，并把 N2 尾插到 tail",
+            invariant: "先写 node.prev，CAS tail 成功后补前驱 next",
+            effect: "enqueue",
             state: "2",
             owner: "T1",
-            queueSummary: "H <-> N2",
             threads: [
                 {name: "T1", state: "RUNNING", desc: "持锁中"},
                 {name: "T2", state: "RUNNING", desc: "已成为队尾节点 N2", active: true},
@@ -860,9 +1073,14 @@
             title: "5) acquireQueued#1：先设置前驱 SIGNAL",
             summary: "N2 在 acquireQueued 中命中 p==head 但 tryAcquire 失败；shouldParkAfterFailedAcquire 把 pred(H).waitStatus:0->-1(SIGNAL)",
             focus: "方法焦点：acquireQueued + shouldParkAfterFailedAcquire",
+            group: "入队阻塞",
+            groupKey: "queue",
+            phase: "SIGNAL 协议",
+            action: "CAS 前驱 waitStatus 0->SIGNAL",
+            invariant: "先让前驱承诺释放时唤醒，当前线程本轮不 park",
+            effect: "signal",
             state: "2",
             owner: "T1",
-            queueSummary: "H(ws=-1) <-> N2",
             threads: [
                 {name: "T1", state: "RUNNING", desc: "持锁中"},
                 {name: "T2", state: "RUNNING", desc: "第一次自旋，未 park", active: true},
@@ -900,9 +1118,14 @@
             title: "6) acquireQueued#2：T2 进入 park",
             summary: "第二轮 shouldParkAfterFailedAcquire 看到 pred.ws==SIGNAL 并返回 true；T2 调用 parkAndCheckInterrupt 进入阻塞",
             focus: "方法焦点：shouldParkAfterFailedAcquire + parkAndCheckInterrupt",
+            group: "入队阻塞",
+            groupKey: "queue",
+            phase: "安全阻塞",
+            action: "pred.ws==SIGNAL 后执行 LockSupport.park",
+            invariant: "park 只改变线程调度状态，不改变队列指针",
+            effect: "park",
             state: "2",
             owner: "T1",
-            queueSummary: "H(ws=-1) <-> N2(parked)",
             threads: [
                 {name: "T1", state: "RUNNING", desc: "持锁中"},
                 {name: "T2", state: "PARKED", desc: "LockSupport.park 阻塞", active: true},
@@ -938,9 +1161,14 @@
             title: "7) T1 第一次 unlock()：仅减计数，不唤醒",
             summary: "T1 调用 unlock，tryRelease 计算 c=state-1=1，free=false，release 返回 false，不触发 unpark",
             focus: "方法焦点：ReentrantLock.unlock -> release(1) -> tryRelease",
+            group: "释放接棒",
+            groupKey: "release",
+            phase: "部分释放",
+            action: "普通写 state--，free=false",
+            invariant: "重入计数未归零时不清 owner，也不唤醒后继",
+            effect: "write",
             state: "1",
             owner: "T1",
-            queueSummary: "H(ws=-1) <-> N2(仍 parked)",
             threads: [
                 {name: "T1", state: "RUNNING", desc: "执行第一次 unlock", active: true},
                 {name: "T2", state: "PARKED", desc: "仍阻塞等待"},
@@ -978,9 +1206,14 @@
             title: "8) T1 第二次 unlock()：完全释放并唤醒 N2",
             summary: "T1 执行 release(1) 时 tryRelease 成功，head=H 且 ws=-1，unparkSuccessor(H) 先把 ws 复位到 0，再唤醒 N2",
             focus: "方法焦点：tryRelease(完全释放) + unparkSuccessor",
+            group: "释放接棒",
+            groupKey: "release",
+            phase: "完全释放",
+            action: "state 归零、清 owner，并 unpark N2",
+            invariant: "unpark 前先把 head.waitStatus 从 SIGNAL 复位为 0",
+            effect: "unpark",
             state: "0",
             owner: "null",
-            queueSummary: "H(ws=0) <-> N2(READY)",
             threads: [
                 {name: "T1", state: "RUNNING", desc: "执行第二次 unlock", active: true},
                 {name: "T2", state: "READY", desc: "收到 unpark，等待 CPU" , active: true},
@@ -1019,9 +1252,14 @@
             title: "9) T2 被唤醒后成功获取锁并 setHead",
             summary: "T2 回到 acquireQueued，自旋命中 p==head 且 tryAcquire 成功，执行 setHead(N2)",
             focus: "方法焦点：acquireQueued 成功分支 + setHead",
+            group: "释放接棒",
+            groupKey: "release",
+            phase: "接棒 setHead",
+            action: "T2 CAS 获取锁，并把 N2 提升为新 head",
+            invariant: "成为 head 的节点会清空 thread 和 prev",
+            effect: "sethead",
             state: "1",
             owner: "T2",
-            queueSummary: "head=tail=N2（旧 H 脱链）",
             threads: [
                 {name: "T1", state: "IDLE", desc: "已退出临界区"},
                 {name: "T2", state: "RUNNING", desc: "成为新 owner", active: true},
@@ -1060,9 +1298,14 @@
             title: "10) T3 lock()：addWaiter 快速尾插成功",
             summary: "T3 在 T2 持锁期间发起竞争，fast path 失败后进入 acquire，此时队列非空，addWaiter 直接 CAS tail 成功，最终形成 N2<->N3",
             focus: "方法焦点：NonfairSync.lock + acquire + addWaiter fast path",
+            group: "二次竞争",
+            groupKey: "handoff",
+            phase: "快速尾插",
+            action: "队列非空，N3 直接 CAS 到 tail",
+            invariant: "tail CAS 成功后再补 N2.next=N3",
+            effect: "enqueue",
             state: "1",
             owner: "T2",
-            queueSummary: "N2(head) <-> N3(tail)",
             threads: [
                 {name: "T1", state: "IDLE", desc: "未参与"},
                 {name: "T2", state: "RUNNING", desc: "持锁中"},
@@ -1102,9 +1345,14 @@
             title: "11) acquireQueued#1：先设置前驱 SIGNAL（N3）",
             summary: "N3 在 acquireQueued 中命中 p==head 但 tryAcquire 失败；shouldParkAfterFailedAcquire 把 pred(N2).waitStatus:0->-1(SIGNAL)",
             focus: "方法焦点：acquireQueued + shouldParkAfterFailedAcquire",
+            group: "二次竞争",
+            groupKey: "handoff",
+            phase: "SIGNAL 协议",
+            action: "CAS N2.waitStatus 0->SIGNAL",
+            invariant: "N3 必须先让 head 承诺唤醒，再考虑 park",
+            effect: "signal",
             state: "1",
             owner: "T2",
-            queueSummary: "N2(ws=-1) <-> N3",
             threads: [
                 {name: "T1", state: "IDLE", desc: "未参与"},
                 {name: "T2", state: "RUNNING", desc: "持锁中"},
@@ -1142,9 +1390,14 @@
             title: "12) acquireQueued#2：T3 进入 park",
             summary: "第二轮 shouldParkAfterFailedAcquire 看到 pred.ws==SIGNAL 并返回 true；T3 调用 parkAndCheckInterrupt 进入阻塞",
             focus: "方法焦点：shouldParkAfterFailedAcquire + parkAndCheckInterrupt",
+            group: "二次竞争",
+            groupKey: "handoff",
+            phase: "安全阻塞",
+            action: "pred.ws==SIGNAL 后执行 LockSupport.park",
+            invariant: "阻塞前后 Sync Queue 的 prev/next 不变",
+            effect: "park",
             state: "1",
             owner: "T2",
-            queueSummary: "N2(ws=-1) <-> N3(parked)",
             threads: [
                 {name: "T1", state: "IDLE", desc: "未参与"},
                 {name: "T2", state: "RUNNING", desc: "持锁中"},
@@ -1179,9 +1432,14 @@
             title: "13) T2 unlock()：完全释放并唤醒 N3",
             summary: "T2 执行 release(1) 时 tryRelease 成功，head=N2 且 ws=-1，unparkSuccessor(N2) 先把 ws 复位到 0，再唤醒 N3",
             focus: "方法焦点：tryRelease(完全释放) + unparkSuccessor",
+            group: "二次竞争",
+            groupKey: "handoff",
+            phase: "完全释放",
+            action: "state 归零、清 owner，并 unpark N3",
+            invariant: "释放线程只负责唤醒，锁的所有权由被唤醒线程再 CAS 获取",
+            effect: "unpark",
             state: "0",
             owner: "null",
-            queueSummary: "N2(ws=0) <-> N3(READY)",
             threads: [
                 {name: "T1", state: "IDLE", desc: "未参与"},
                 {name: "T2", state: "RUNNING", desc: "执行 unlock", active: true},
@@ -1220,9 +1478,14 @@
             title: "14) T3 被唤醒后成功获取锁并 setHead",
             summary: "T3 回到 acquireQueued，自旋命中 p==head 且 tryAcquire 成功，执行 setHead(N3)",
             focus: "方法焦点：acquireQueued 成功分支 + setHead",
+            group: "二次竞争",
+            groupKey: "handoff",
+            phase: "接棒 setHead",
+            action: "T3 CAS 获取锁，并把 N3 提升为新 head",
+            invariant: "setHead 会断开旧 head，保留队列头占位语义",
+            effect: "sethead",
             state: "1",
             owner: "T3",
-            queueSummary: "head=tail=N3",
             threads: [
                 {name: "T1", state: "IDLE", desc: "未参与"},
                 {name: "T2", state: "IDLE", desc: "已释放"},
@@ -1261,9 +1524,14 @@
             title: "15) T3 unlock()：无后继时直接结束",
             summary: "T3 release(1) 后 state=0，head=N3 且 ws=0，不满足 h.waitStatus!=0，因此不再 unpark",
             focus: "方法焦点：release 的 “无后继唤醒” 分支",
+            group: "收尾边界",
+            groupKey: "boundary",
+            phase: "释放收尾",
+            action: "state 归零；head.waitStatus==0，唤醒短路",
+            invariant: "没有 SIGNAL 承诺时，不需要寻找后继并 unpark",
+            effect: "complete",
             state: "0",
             owner: "null",
-            queueSummary: "仅 head 节点 N3（无等待者）",
             threads: [
                 {name: "T1", state: "IDLE", desc: "未参与"},
                 {name: "T2", state: "IDLE", desc: "未参与"},
@@ -1298,9 +1566,14 @@
             title: "16) 错误分支：T4 非持有者 unlock() 抛异常",
             summary: "T4 调用 unlock，tryRelease 首行校验 currentThread != owner（owner=null），直接抛 IllegalMonitorStateException",
             focus: "方法焦点：tryRelease 的 owner 校验分支",
+            group: "收尾边界",
+            groupKey: "boundary",
+            phase: "异常边界",
+            action: "owner 校验失败，抛 IllegalMonitorStateException",
+            invariant: "非法 unlock 不改变 state、owner 或队列",
+            effect: "exception",
             state: "0",
             owner: "null",
-            queueSummary: "队列不变",
             threads: [
                 {name: "T1", state: "IDLE", desc: "未参与"},
                 {name: "T2", state: "IDLE", desc: "未参与"},
@@ -1337,9 +1610,10 @@
         prevBtn: document.getElementById("prevBtn"),
         nextBtn: document.getElementById("nextBtn"),
         resetBtn: document.getElementById("resetBtn"),
+        actionValue: document.getElementById("actionValue"),
+        invariantValue: document.getElementById("invariantValue"),
         stateValue: document.getElementById("stateValue"),
         ownerValue: document.getElementById("ownerValue"),
-        queueValue: document.getElementById("queueValue"),
         threadLane: document.getElementById("threadLane"),
         queueWrap: document.getElementById("queueWrap"),
         stepTitle: document.getElementById("stepTitle"),
@@ -1357,7 +1631,6 @@
     };
 
     let current = 0;
-    let fixedPanelHeight = null;
 
     function stateClass(state) {
         const s = String(state || "").toUpperCase();
@@ -1397,24 +1670,22 @@
         });
     }
 
-    function buildBackwardChain(nodes) {
-        if (!nodes || nodes.length === 0) return "(空)";
-        return nodes.slice().reverse().map((n) => n.id).join(" -> ");
-    }
-
     function renderQueue(step) {
         el.queueWrap.innerHTML = "";
         const nodes = step.queue || [];
         if (nodes.length === 0) {
             const empty = document.createElement("div");
             empty.className = "queue-empty";
-            empty.textContent = "当前无节点（尚未创建 Sync Queue）";
+            empty.innerHTML = `
+                <strong>Sync Queue 尚未创建</strong>
+                <span>head=null, tail=null</span>
+            `;
             el.queueWrap.appendChild(empty);
             return;
         }
 
-        const forward = document.createElement("div");
-        forward.className = "queue-forward";
+        const chain = document.createElement("div");
+        chain.className = "queue-chain";
 
         nodes.forEach((node, index) => {
             const card = document.createElement("article");
@@ -1437,44 +1708,21 @@
                 <div class="node-line"><span class="label">prev:</span> ${node.prev}</div>
                 <div class="node-line"><span class="label">next:</span> ${node.next}</div>
             `;
-            forward.appendChild(card);
+            chain.appendChild(card);
 
             if (index < nodes.length - 1) {
-                const arrow = document.createElement("span");
-                arrow.className = "arrow";
-                arrow.textContent = "→";
-                forward.appendChild(arrow);
+                const link = document.createElement("div");
+                link.className = "link-pair";
+                link.setAttribute("aria-hidden", "true");
+                link.innerHTML = `
+                    <span class="link-arrow">→</span>
+                    <span class="link-arrow">←</span>
+                `;
+                chain.appendChild(link);
             }
         });
 
-        el.queueWrap.appendChild(forward);
-
-        const pointer = document.createElement("div");
-        pointer.className = "pointer-panel";
-
-        const title1 = document.createElement("div");
-        title1.className = "pointer-title";
-        title1.textContent = "双向指针快照";
-        pointer.appendChild(title1);
-
-        nodes.forEach((node) => {
-            const line = document.createElement("div");
-            line.className = "pointer-line";
-            line.textContent = `${node.id}.prev=${node.prev}, ${node.id}.next=${node.next}`;
-            pointer.appendChild(line);
-        });
-
-        const title2 = document.createElement("div");
-        title2.className = "pointer-title";
-        title2.textContent = "反向遍历（tail -> head）";
-        pointer.appendChild(title2);
-
-        const backward = document.createElement("div");
-        backward.className = "pointer-line";
-        backward.textContent = buildBackwardChain(nodes);
-        pointer.appendChild(backward);
-
-        el.queueWrap.appendChild(pointer);
+        el.queueWrap.appendChild(chain);
     }
 
     function renderList(target, lines, emptyText) {
@@ -1496,28 +1744,70 @@
 
     function renderTimeline() {
         el.timeline.innerHTML = "";
+        let activeChip = null;
+        let previousGroup = null;
+        const currentGroup = steps[current].group;
         steps.forEach((step, index) => {
+            if (step.group !== previousGroup) {
+                const groupLabel = document.createElement("div");
+                const groupLastIndex = steps.reduce((last, item, itemIndex) => {
+                    return item.group === step.group ? itemIndex : last;
+                }, -1);
+                const groupClasses = ["timeline-group"];
+                if (groupLastIndex < current) groupClasses.push("done");
+                if (step.group === currentGroup) groupClasses.push("active");
+                groupLabel.className = groupClasses.join(" ");
+                groupLabel.textContent = step.group;
+                groupLabel.setAttribute("role", "heading");
+                groupLabel.setAttribute("aria-level", "3");
+                el.timeline.appendChild(groupLabel);
+                previousGroup = step.group;
+            }
+
             const chip = document.createElement("button");
             chip.type = "button";
             const classes = ["step-chip"];
             if (index < current) classes.push("done");
             if (index === current) classes.push("active");
+            const label = step.title.replace(/^\d+\)\s*/, "");
             chip.className = classes.join(" ");
-            chip.textContent = step.title.replace(/^\d+\)\s*/, "");
+            chip.setAttribute("aria-label", `跳转到第 ${index + 1} 步：${step.group} / ${step.phase}，${label}`);
+            if (index === current) {
+                chip.setAttribute("aria-current", "step");
+                activeChip = chip;
+            }
+            const labelWrap = document.createElement("span");
+            const title = document.createElement("span");
+            const phase = document.createElement("span");
+            labelWrap.className = "step-chip-copy";
+            title.className = "step-chip-title";
+            phase.className = "step-chip-phase";
+            title.textContent = label;
+            phase.textContent = step.phase;
+            labelWrap.appendChild(title);
+            labelWrap.appendChild(phase);
+            chip.appendChild(labelWrap);
             chip.addEventListener("click", () => {
                 current = index;
                 render(true);
             });
             el.timeline.appendChild(chip);
         });
+
+        if (activeChip) {
+            activeChip.scrollIntoView({block: "nearest", inline: "nearest"});
+        }
     }
 
     function render(animate) {
         const step = steps[current];
 
+        el.stage.dataset.effect = step.effect || "none";
+        el.stage.dataset.group = step.groupKey || "none";
+        el.actionValue.textContent = step.action;
+        el.invariantValue.textContent = step.invariant;
         el.stateValue.textContent = step.state;
         el.ownerValue.textContent = step.owner;
-        el.queueValue.textContent = step.queueSummary;
 
         renderThreads(step);
         renderQueue(step);
@@ -1538,34 +1828,7 @@
         el.prevBtn.disabled = current === 0;
         el.nextBtn.disabled = current === steps.length - 1;
 
-        if (fixedPanelHeight !== null) {
-            const h = `${fixedPanelHeight}px`;
-            el.stage.style.height = h;
-            el.explain.style.height = h;
-        }
-
         if (animate) flashStage();
-    }
-
-    function computeFixedPanelHeight() {
-        const savedCurrent = current;
-
-        fixedPanelHeight = null;
-        el.stage.style.height = "auto";
-        el.explain.style.height = "auto";
-
-        let maxStage = 0;
-        let maxExplain = 0;
-
-        for (let i = 0; i < steps.length; i += 1) {
-            current = i;
-            render(false);
-            maxStage = Math.max(maxStage, el.stage.scrollHeight);
-            maxExplain = Math.max(maxExplain, el.explain.scrollHeight);
-        }
-
-        fixedPanelHeight = Math.max(maxStage, maxExplain);
-        current = savedCurrent;
     }
 
     function prev() {
@@ -1609,17 +1872,6 @@
         }
     });
 
-    let resizeTimer = null;
-    window.addEventListener("resize", () => {
-        window.clearTimeout(resizeTimer);
-        resizeTimer = window.setTimeout(() => {
-            computeFixedPanelHeight();
-            render(false);
-        }, 120);
-    });
-
-    render(false);
-    computeFixedPanelHeight();
     render(false);
 })();
 </script>

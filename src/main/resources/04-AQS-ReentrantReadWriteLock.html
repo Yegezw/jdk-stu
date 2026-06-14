@@ -3,21 +3,28 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AQS + ReentrantReadWriteLock 动画流程图</title>
+    <title>AQS 读写锁动画流程图（ReentrantReadWriteLock）</title>
     <style>
         :root {
-            --bg: #f8fafc;
-            --card: #ffffff;
-            --soft: #f1f5f9;
-            --line: #dbe3ef;
-            --text: #0f172a;
-            --muted: #475569;
+            --bg: #f6f7f9;
+            --surface: #ffffff;
+            --surface-soft: #f8fafc;
+            --line: #d8e0ec;
+            --line-strong: #b9c6d8;
+            --text: #111827;
+            --muted: #5f6b7a;
             --blue: #2563eb;
-            --violet: #7c3aed;
-            --green: #16a34a;
-            --orange: #ea580c;
+            --blue-soft: #eef5ff;
+            --green: #15803d;
+            --green-soft: #ecfdf3;
+            --orange: #c2410c;
+            --orange-soft: #fff4e6;
             --red: #dc2626;
-            --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+            --red-soft: #fff1f2;
+            --violet: #6d28d9;
+            --violet-soft: #f5f3ff;
+            --shadow: 0 8px 22px rgba(17, 24, 39, 0.07);
+            --radius: 8px;
         }
 
         * {
@@ -27,91 +34,100 @@
         body {
             margin: 0;
             font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
-            background: linear-gradient(165deg, #eaf2ff 0%, var(--bg) 56%);
+            background: var(--bg);
             color: var(--text);
-            line-height: 1.56;
+            line-height: 1.5;
+        }
+
+        button {
+            font: inherit;
         }
 
         .app {
-            width: min(1420px, calc(100vw - 20px));
-            margin: 12px auto 26px;
+            width: min(1540px, calc(100vw - 24px));
+            min-width: 1420px;
+            height: 100vh;
+            margin: 0 auto;
+            padding: 12px 0 18px;
             display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
             gap: 10px;
+            overflow: hidden;
         }
 
         .app > *,
-        .layout > *,
+        .topbar > *,
+        .workspace > *,
         .stage > * {
             min-width: 0;
         }
 
-        .card {
-            background: var(--card);
+        .topbar,
+        .timeline-panel,
+        .stage,
+        .explain {
+            background: var(--surface);
             border: 1px solid var(--line);
-            border-radius: 14px;
+            border-radius: var(--radius);
             box-shadow: var(--shadow);
         }
 
+        .topbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+        }
+
         .hero {
-            padding: 14px 16px;
+            display: grid;
+            gap: 4px;
+        }
+
+        .eyebrow {
+            margin: 0;
+            color: var(--blue);
+            font-size: 12px;
+            font-weight: 800;
         }
 
         .hero h1 {
             margin: 0;
-            font-size: clamp(22px, 2.6vw, 31px);
-            line-height: 1.26;
+            font-size: 24px;
+            line-height: 1.25;
         }
 
         .hero p {
-            margin: 7px 0 0;
+            margin: 0;
             color: var(--muted);
             font-size: 13px;
         }
 
-        .hero .tip {
-            margin-top: 8px;
-            padding: 7px 10px;
-            background: var(--soft);
-            border: 1px solid #d6e2f6;
-            border-radius: 9px;
-            font-size: 12px;
-            color: #334155;
-        }
-
         .controls {
-            padding: 10px;
             display: flex;
             flex-wrap: wrap;
+            justify-content: flex-end;
             align-items: center;
             gap: 8px;
         }
 
-        .model-pill {
-            border: 1px solid #bfdbfe;
-            background: #eff6ff;
-            color: #1e3a8a;
-            border-radius: 999px;
-            padding: 6px 10px;
-            font-size: 12px;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-
         .btn {
-            border: 1px solid #c8d5ea;
+            min-height: 34px;
+            border: 1px solid var(--line-strong);
             background: #ffffff;
-            color: #1e293b;
-            border-radius: 9px;
-            padding: 7px 11px;
+            color: #243044;
+            border-radius: var(--radius);
+            padding: 6px 10px;
             font-size: 13px;
-            font-weight: 700;
+            font-weight: 800;
             cursor: pointer;
-            transition: 0.18s ease;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
         }
 
         .btn:hover {
-            border-color: #93c5fd;
-            background: #eff6ff;
+            border-color: #93b5e8;
+            background: var(--blue-soft);
             color: #1d4ed8;
         }
 
@@ -122,64 +138,346 @@
         }
 
         .btn:disabled {
-            opacity: 0.55;
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
-        .control-note {
-            margin-left: auto;
-            color: #64748b;
+        .model-pill,
+        .control-note,
+        .counter-pill {
+            border-radius: var(--radius);
+            padding: 6px 9px;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 800;
         }
 
-        .layout {
+        .model-pill {
+            border: 1px solid #bdd3f5;
+            background: var(--blue-soft);
+            color: #1e3a8a;
+        }
+
+        .control-note {
+            color: #64748b;
+            background: var(--surface-soft);
+            border: 1px solid #e2e8f0;
+        }
+
+        .counter-pill {
+            color: #36506f;
+            background: #f0f6ff;
+            border: 1px solid #c8daf5;
+            white-space: nowrap;
+        }
+
+        .workspace {
             display: grid;
-            grid-template-columns: 1.52fr 1fr;
+            grid-template-columns: 240px minmax(760px, 1fr) 370px;
+            grid-template-areas: "timeline stage explain";
             gap: 10px;
-            align-items: start;
+            align-items: stretch;
+            min-height: 0;
+        }
+
+        .timeline-panel,
+        .stage,
+        .explain {
+            height: auto;
+            min-height: 0;
+            max-height: none;
+        }
+
+        .timeline-panel {
+            grid-area: timeline;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            overflow: hidden;
+        }
+
+        .timeline-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            padding: 10px 10px 8px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .timeline-head h2 {
+            margin: 0;
+            font-size: 14px;
+            color: #243044;
+        }
+
+        .timeline-head span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .timeline {
+            counter-reset: step;
+            display: grid;
+            align-content: start;
+            gap: 7px;
+            padding: 10px;
+            overflow: auto;
+        }
+
+        .timeline-group {
+            margin: 7px 0 1px;
+            border: 1px solid #dce4ef;
+            border-radius: var(--radius);
+            background: #f8fafc;
+            color: #475569;
+            padding: 5px 8px;
+            font-size: 11px;
+            font-weight: 900;
+        }
+
+        .timeline-group.done {
+            border-color: #b7e4c4;
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .timeline-group.active {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .step-chip {
+            counter-increment: step;
+            width: 100%;
+            height: max-content;
+            min-height: 68px;
+            border: 1px solid #d1dae8;
+            background: #ffffff;
+            color: #334155;
+            border-radius: var(--radius);
+            padding: 8px 9px;
+            display: grid;
+            grid-template-columns: 32px minmax(0, 1fr);
+            gap: 8px;
+            align-items: center;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .step-chip::before {
+            content: counter(step);
+            width: 30px;
+            height: 30px;
+            display: grid;
+            place-items: center;
+            border-radius: 999px;
+            background: #e9eef6;
+            color: #475569;
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .step-chip:hover {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .step-chip.done {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .step-chip.done::before {
+            background: #d9f7e3;
+            color: var(--green);
+        }
+
+        .step-chip.active {
+            border-color: #1d4ed8;
+            background: #1d4ed8;
+            color: #ffffff;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+        }
+
+        .step-chip.active::before {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+        }
+
+        .step-chip-title,
+        .step-chip-phase {
+            min-width: 0;
+        }
+
+        .step-chip-copy {
+            display: grid;
+            gap: 3px;
+            align-self: center;
+            min-width: 0;
+            line-height: 1.34;
+        }
+
+        .step-chip-title {
+            overflow-wrap: anywhere;
+        }
+
+        .step-chip-phase {
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 800;
+            line-height: 1.3;
+            white-space: normal;
+            overflow: visible;
+        }
+
+        .step-chip.done .step-chip-phase {
+            color: #15803d;
+        }
+
+        .step-chip.active .step-chip-phase {
+            color: rgba(255, 255, 255, 0.76);
         }
 
         .stage {
+            grid-area: stage;
             padding: 10px;
             display: grid;
-            grid-template-rows: auto 148px 196px minmax(0, 1fr);
+            grid-template-rows: auto auto 108px 120px minmax(0, 1fr);
             gap: 8px;
-            transition: box-shadow 0.18s ease, border-color 0.18s ease;
-            align-content: start;
+            overflow: hidden;
+            transition: box-shadow 0.16s ease, border-color 0.16s ease;
         }
 
         .stage.flash {
-            border-color: #93c5fd;
+            border-color: #93b5e8;
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13), var(--shadow);
+        }
+
+        .step-context {
+            height: 62px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .context-card {
+            height: 62px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 7px 8px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            align-content: start;
+            overflow: hidden;
+            transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .context-card span {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .context-card strong {
+            display: block;
+            margin-top: 4px;
+            color: #111827;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        .context-value {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stage[data-effect="cas"] .context-action,
+        .stage[data-effect="signal"] .context-action {
+            border-color: #93c5fd;
+            background: var(--blue-soft);
+        }
+
+        .stage[data-effect="write"] .context-action {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+        }
+
+        .stage[data-effect="miss"] .context-action {
+            border-color: #c7d2e3;
+            background: var(--surface-soft);
+        }
+
+        .stage[data-effect="enqueue"] .context-action,
+        .stage[data-effect="sethead"] .context-action {
+            border-color: #c4b5fd;
+            background: var(--violet-soft);
+        }
+
+        .stage[data-effect="park"] .context-action,
+        .stage[data-effect="unpark"] .context-action {
+            border-color: #fed7aa;
+            background: var(--orange-soft);
+        }
+
+        .stage[data-effect="exception"] .context-action {
+            border-color: #fca5a5;
+            background: var(--red-soft);
+        }
+
+        .stage[data-effect="complete"] .context-action {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+        }
+
+        .stage[data-effect="cas"] .status-state,
+        .stage[data-effect="write"] .status-state,
+        .stage[data-effect="unpark"] .status-state,
+        .stage[data-effect="sethead"] .status-state {
+            border-color: #93c5fd;
+            background: #f0f6ff;
         }
 
         .status-grid {
             display: grid;
-            grid-template-columns: 210px 280px minmax(0, 1fr);
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 7px;
         }
 
         .status {
+            min-height: 62px;
             border: 1px solid var(--line);
-            border-radius: 10px;
-            background: #f8fbff;
-            padding: 7px;
-            min-height: 90px;
+            border-radius: var(--radius);
+            background: var(--surface-soft);
+            padding: 7px 8px;
+            overflow: hidden;
         }
 
         .status span {
             display: block;
+            color: var(--muted);
             font-size: 11px;
-            color: #64748b;
+            font-weight: 700;
         }
 
         .status strong {
             display: block;
             margin-top: 4px;
+            color: #111827;
             font-size: 13px;
-            line-height: 1.36;
-            color: #0f172a;
+            line-height: 1.35;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .status-state strong {
@@ -187,89 +485,112 @@
             font-variant-numeric: tabular-nums;
         }
 
+        .lane,
         .flow {
+            min-height: 0;
             border: 1px solid var(--line);
-            border-radius: 10px;
+            border-radius: var(--radius);
             background: #fcfdff;
             padding: 8px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 7px;
         }
 
+        .lane h3,
         .flow h3 {
-            margin: 0 0 6px;
-            font-size: 13px;
+            margin: 0;
             color: #334155;
+            font-size: 13px;
+        }
+
+        .flow-grid {
+            min-height: 0;
+            display: grid;
+            gap: 7px;
+            align-content: start;
         }
 
         .flow-row {
+            display: grid;
+            grid-template-columns: 42px minmax(0, 1fr);
+            align-items: center;
+            gap: 7px;
+            min-width: 0;
+            overflow: visible;
+        }
+
+        .flow-label {
+            border-radius: 999px;
+            background: #e5e9f0;
+            color: #475569;
+            padding: 3px 7px;
+            font-size: 10px;
+            font-weight: 900;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .flow-row.active .flow-label {
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .flow-track {
             display: flex;
             align-items: center;
-            gap: 6px;
-            overflow-x: auto;
-            padding-bottom: 4px;
+            gap: 4px;
+            min-width: 0;
+            overflow: visible;
         }
 
         .flow-node {
-            border: 1px solid #d9e3f2;
+            flex: 1 1 0;
+            min-width: 0;
+            border: 1px solid #d8e0ec;
+            border-radius: var(--radius);
             background: #ffffff;
-            border-radius: 8px;
-            padding: 6px 8px;
-            font-size: 12px;
-            white-space: nowrap;
+            padding: 4px 6px;
             color: #334155;
-            transition: 0.18s ease;
+            font-size: 11px;
+            font-weight: 800;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            opacity: 1;
         }
 
         .flow-node.active {
             border-color: #60a5fa;
-            background: #eff6ff;
-            color: #1e40af;
-            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+            background: #ffffff;
+            color: #334155;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+            opacity: 1;
         }
 
         .flow-arrow {
-            font-size: 12px;
+            flex: 0 0 10px;
             color: #94a3b8;
-        }
-
-        .lane {
-            border: 1px solid var(--line);
-            border-radius: 10px;
-            background: #fcfdff;
-            padding: 8px;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .lane h3 {
-            margin: 0 0 7px;
-            font-size: 13px;
-            color: #334155;
-        }
-
-        .lane-threads {
-            min-height: 196px;
-        }
-
-        .lane-queue {
-            min-height: 530px;
+            font-size: 12px;
+            font-weight: 900;
+            text-align: center;
         }
 
         .threads {
             display: grid;
-            gap: 7px;
-            grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             grid-auto-rows: 76px;
-            align-content: start;
-            flex: 1;
+            gap: 7px;
         }
 
         .thread {
-            border: 1px solid #d9e3f2;
-            border-radius: 9px;
+            height: 76px;
+            border: 1px solid #d8e0ec;
+            border-radius: var(--radius);
             background: #ffffff;
             padding: 7px;
-            height: 76px;
-            transition: 0.18s ease;
+            overflow: hidden;
         }
 
         .thread.active {
@@ -285,93 +606,126 @@
         }
 
         .thread-name {
-            font-size: 13px;
-            color: #0f172a;
-            line-height: 1;
-        }
-
-        .thread p {
-            margin: 6px 0 0;
             font-size: 12px;
-            color: #475569;
-            line-height: 1.34;
+            font-weight: 800;
         }
 
         .badge {
             border-radius: 999px;
-            padding: 3px 8px;
+            padding: 2px 7px;
             font-size: 10px;
-            font-weight: 700;
-            line-height: 1;
-            border: 1px solid transparent;
-            white-space: nowrap;
+            font-weight: 800;
         }
 
         .b-running {
-            background: #e0f2fe;
-            color: #0c4a6e;
-            border-color: #7dd3fc;
+            background: #dcfce7;
+            color: #065f46;
         }
 
         .b-ready {
-            background: #ecfdf5;
-            color: #14532d;
-            border-color: #86efac;
+            background: #dbeafe;
+            color: #1e3a8a;
         }
 
         .b-parked {
-            background: #fff7ed;
+            background: var(--orange-soft);
             color: #9a3412;
-            border-color: #fdba74;
         }
 
         .b-idle {
-            background: #f1f5f9;
-            color: #334155;
-            border-color: #cbd5e1;
+            background: #e5e9f0;
+            color: #475569;
         }
 
         .b-ex {
             background: #fee2e2;
             color: #991b1b;
-            border-color: #fca5a5;
+        }
+
+        .thread p {
+            margin: 6px 0 0;
+            color: #475569;
+            font-size: 11px;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
         }
 
         .queue-wrap {
-            min-height: 100%;
+            min-height: 0;
             display: grid;
             gap: 8px;
             align-content: start;
+            overflow: auto;
+            padding-right: 2px;
         }
 
         .queue-empty {
-            border: 1px dashed #cbd5e1;
-            border-radius: 10px;
-            background: #f8fafc;
-            color: #64748b;
-            padding: 12px;
-            font-size: 13px;
+            min-height: 124px;
+            border: 1px dashed #c7d2e3;
+            border-radius: var(--radius);
+            padding: 10px;
+            display: grid;
+            place-content: center;
+            gap: 4px;
+            background: var(--surface-soft);
             text-align: center;
         }
 
-        .queue-forward {
-            border: 1px solid #dbe3ef;
-            border-radius: 10px;
-            background: #ffffff;
-            padding: 9px;
+        .queue-empty strong {
+            color: #334155;
+            font-size: 13px;
+        }
+
+        .queue-empty span {
+            color: var(--muted);
+            font-family: Menlo, Consolas, monospace;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .queue-chain {
             display: flex;
-            align-items: stretch;
-            gap: 7px;
-            overflow-x: auto;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            align-content: flex-start;
+            min-height: 0;
+        }
+
+        .link-pair {
+            width: 46px;
+            display: grid;
+            gap: 4px;
+            justify-items: center;
+            align-content: center;
+            color: #64748b;
+            user-select: none;
+        }
+
+        .link-arrow {
+            display: block;
+            font-size: 23px;
+            font-weight: 900;
+            line-height: 0.82;
+            letter-spacing: 0;
         }
 
         .node {
-            min-width: 168px;
-            border: 1px solid #d9e3f2;
-            border-radius: 10px;
-            background: #f8fbff;
+            width: 190px;
+            border: 1px solid #d2dceb;
+            border-radius: var(--radius);
+            background: #ffffff;
             padding: 7px;
-            transition: 0.18s ease;
+        }
+
+        .node.head {
+            border-color: #a78bfa;
+            background: var(--violet-soft);
+        }
+
+        .node.cancelled {
+            border-color: #fca5a5;
+            background: var(--red-soft);
         }
 
         .node.active {
@@ -379,287 +733,131 @@
             box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
         }
 
-        .node.head {
-            border-color: #818cf8;
-            background: #eef2ff;
-        }
-
-        .node.cancelled {
-            border-color: #fca5a5;
-            background: #fff1f2;
-        }
-
         .node-top {
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 6px;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
 
         .node-title {
-            font-size: 13px;
-            font-weight: 700;
-            color: #0f172a;
+            color: #111827;
+            font-size: 12px;
+            font-weight: 900;
         }
 
         .node-role {
-            border: 1px solid #cbd5e1;
             border-radius: 999px;
-            padding: 2px 7px;
-            font-size: 10px;
-            font-weight: 700;
+            padding: 1px 6px;
+            background: #e5e9f0;
             color: #334155;
-            background: #ffffff;
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
         }
 
         .node-line {
-            font-size: 11px;
+            margin: 0;
             color: #334155;
-            line-height: 1.38;
+            font-size: 11px;
         }
 
         .node-line .label {
             color: #64748b;
-            margin-right: 2px;
         }
 
         .ws {
-            font-family: Menlo, Consolas, monospace;
-            font-variant-numeric: tabular-nums;
-            font-weight: 700;
+            font-weight: 900;
         }
 
         .ws.neg {
-            color: #b45309;
-        }
-
-        .ws.pos {
-            color: #b91c1c;
+            color: #0f766e;
         }
 
         .ws.zero {
-            color: #0f172a;
+            color: #1d4ed8;
         }
 
-        .arrow {
-            align-self: center;
-            color: #94a3b8;
-            font-size: 16px;
-            font-weight: 700;
-            flex: 0 0 auto;
-        }
-
-        .pointer-panel {
-            border: 1px solid #dbe3ef;
-            border-radius: 10px;
-            background: #f8fbff;
-            padding: 8px;
-            display: grid;
-            gap: 4px;
-        }
-
-        .pointer-title {
-            font-size: 11px;
-            font-weight: 700;
-            color: #334155;
-        }
-
-        .pointer-line {
-            font-size: 11px;
-            color: #475569;
-            font-family: Menlo, Consolas, monospace;
-            overflow-wrap: anywhere;
+        .ws.pos {
+            color: var(--red);
         }
 
         .explain {
+            grid-area: explain;
             padding: 10px;
             display: grid;
-            grid-template-rows: auto auto auto repeat(5, auto) auto;
-            gap: 8px;
             align-content: start;
+            gap: 8px;
+            overflow: auto;
         }
 
         .explain h2 {
             margin: 0;
-            font-size: 19px;
+            font-size: 18px;
             line-height: 1.32;
         }
 
-        .summary {
+        .explain .summary {
             margin: 0;
-            color: #334155;
+            color: var(--muted);
             font-size: 13px;
         }
 
         .focus-box {
-            border: 1px solid #bfdbfe;
-            background: #eff6ff;
+            border: 1px solid #bdd3f5;
+            border-radius: var(--radius);
+            background: var(--blue-soft);
             color: #1e3a8a;
-            border-radius: 9px;
-            padding: 7px 9px;
+            padding: 7px 8px;
             font-size: 12px;
-            line-height: 1.38;
+            font-weight: 800;
         }
 
         .detail {
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
             background: #ffffff;
-            padding: 7px 8px;
+            padding: 8px;
         }
 
         .detail h3 {
             margin: 0 0 6px;
-            font-size: 12px;
             color: #334155;
+            font-size: 12px;
         }
 
         .detail ul {
+            list-style: none;
             margin: 0;
-            padding-left: 18px;
+            padding: 0;
             display: grid;
             gap: 5px;
         }
 
         .detail li {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: var(--surface-soft);
+            padding: 5px 7px;
             color: #334155;
             font-size: 12px;
-            line-height: 1.4;
+            line-height: 1.45;
         }
 
         .detail li.empty {
-            color: #94a3b8;
-            list-style: none;
-            margin-left: -18px;
+            color: var(--muted);
+            border-style: dashed;
         }
 
         .note {
-            border: 1px dashed #cbd5e1;
-            border-radius: 9px;
-            background: #f8fafc;
-            color: #475569;
+            color: var(--muted);
             font-size: 12px;
-            padding: 7px 9px;
         }
 
-        .timeline-card {
-            padding: 10px;
-        }
-
-        .timeline-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 8px;
-        }
-
-        .timeline-head h3 {
-            margin: 0;
-            font-size: 14px;
-            color: #334155;
-        }
-
-        #stepCounter {
-            font-size: 12px;
-            color: #64748b;
-            font-weight: 700;
-        }
-
-        .timeline {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 7px;
-        }
-
-        .step-chip {
-            border: 1px solid #cbd5e1;
-            background: #ffffff;
-            color: #334155;
-            border-radius: 999px;
-            padding: 6px 10px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: 0.18s ease;
-        }
-
-        .step-chip:hover {
-            border-color: #93c5fd;
-            background: #eff6ff;
-            color: #1d4ed8;
-        }
-
-        .step-chip.done {
-            border-color: #bbf7d0;
-            background: #f0fdf4;
-            color: #166534;
-        }
-
-        .step-chip.active {
-            border-color: #60a5fa;
-            background: #eff6ff;
-            color: #1e3a8a;
-            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
-        }
-
-        .legend ul {
-            margin: 0;
-            padding-left: 18px;
-            display: grid;
-            gap: 6px;
-        }
-
-        .legend li {
-            font-size: 12px;
-            color: #334155;
-            line-height: 1.42;
-        }
-
-        @media (max-width: 1160px) {
-            .layout {
-                grid-template-columns: 1fr;
-            }
-
-            .status-grid {
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-            }
-
-            .stage {
-                grid-template-rows: auto 160px 204px minmax(0, 1fr);
-            }
-        }
-
-        @media (max-width: 760px) {
-            .app {
-                width: calc(100% - 10px);
-                margin-top: 6px;
-            }
-
-            .controls {
-                gap: 6px;
-            }
-
-            .control-note {
-                width: 100%;
-                margin-left: 0;
-            }
-
-            .status-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .stage {
-                grid-template-rows: auto 176px 216px minmax(0, 1fr);
-            }
-
-            .lane-threads {
-                min-height: auto;
-            }
-
-            .lane-queue {
-                min-height: 500px;
-            }
+        .queue-change-arrow {
+            color: #c2410c;
+            font-weight: 900;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -672,55 +870,83 @@
 </head>
 <body>
 <div class="app">
-    <section class="hero card">
-        <h1>AQS + ReentrantReadWriteLock 动画流程图</h1>
-        <p>以 Doug Lea 视角拆解 NonfairSync：写锁重入、读锁共享、共享传播、写线程排队唤醒，并补充读锁重入计数细节与降级/升级语义</p>
-        <p class="tip">state 按位编码：<strong>高 16 位 = 读计数</strong>，<strong>低 16 位 = 写重入计数</strong>；除主流程外，末尾还包含两个独立分支：读锁重入内部计数、写降级与读升级语义</p>
-    </section>
+    <header class="topbar">
+        <section class="hero" aria-labelledby="pageTitle">
+            <p class="eyebrow">ReentrantReadWriteLock.NonfairSync + AQS 读写状态编码</p>
+            <h1 id="pageTitle">AQS 读写锁全细节流程图</h1>
+            <p>按源码单步调试视角展示 state 高低位、写锁重入、共享传播、写锁降级、读锁升级自陷和 Sync Queue 的同一时刻快照</p>
+        </section>
 
-    <section class="controls card" aria-label="流程控制">
-        <button id="prevBtn" class="btn" type="button">⏮ 上一步</button>
-        <button id="nextBtn" class="btn" type="button">⏭ 下一步</button>
-        <button id="resetBtn" class="btn" type="button">↺ 重置</button>
-        <div class="model-pill">演示模型：ReentrantReadWriteLock.NonfairSync</div>
-        <div class="control-note">快捷键：← 上一步，→ 下一步，Home 重置（线程：T1/T2/T3/T4）</div>
-    </section>
+        <section class="controls" aria-label="流程控制">
+            <button id="prevBtn" class="btn" type="button">上一步</button>
+            <button id="nextBtn" class="btn" type="button">下一步</button>
+            <button id="resetBtn" class="btn" type="button">重置</button>
+            <div class="counter-pill" id="stepCounter">-</div>
+            <div class="model-pill">Java 8 / ReentrantReadWriteLock.NonfairSync</div>
+            <div class="control-note">快捷键：← / → / Home</div>
+        </section>
+    </header>
 
-    <section class="layout">
-        <article id="stage" class="stage card" aria-live="off">
+    <main class="workspace">
+        <nav class="timeline-panel" aria-labelledby="timelineTitle">
+            <div class="timeline-head">
+                <h2 id="timelineTitle">源码步骤</h2>
+                <span>可点击跳转</span>
+            </div>
+            <div id="timeline" class="timeline"></div>
+        </nav>
+
+        <article id="stage" class="stage" aria-live="off">
+            <section class="step-context" aria-label="当前步骤机制">
+                <div class="context-card context-action">
+                    <span>当前动作</span>
+                    <strong id="actionValue" class="context-value">-</strong>
+                </div>
+                <div class="context-card context-invariant">
+                    <span>机制不变量</span>
+                    <strong id="invariantValue" class="context-value">-</strong>
+                </div>
+            </section>
+
             <div class="status-grid">
                 <div class="status status-state">
                     <span>state（高 16 读 | 低 16 写）</span>
                     <strong id="stateValue">-</strong>
                 </div>
                 <div class="status">
-                    <span>持有摘要</span>
-                    <strong id="ownerValue">-</strong>
+                    <span>写锁持有</span>
+                    <strong id="writeValue">-</strong>
                 </div>
                 <div class="status">
-                    <span>队列摘要</span>
-                    <strong id="queueValue">-</strong>
+                    <span>读锁持有</span>
+                    <strong id="readValue">-</strong>
+                </div>
+                <div class="status">
+                    <span>本步结果</span>
+                    <strong id="resultValue">-</strong>
                 </div>
             </div>
 
-            <section class="flow" aria-label="流程图总览">
-                <h3>流程图总览（当前步骤会高亮）</h3>
-                <div id="flowWrite" class="flow-row"></div>
-                <div id="flowRead" class="flow-row"></div>
+            <section class="flow" aria-labelledby="flowTitle">
+                <h3 id="flowTitle">源码路径总览</h3>
+                <div class="flow-grid">
+                    <div id="flowWrite" class="flow-row"></div>
+                    <div id="flowRead" class="flow-row"></div>
+                </div>
             </section>
 
-            <section class="lane lane-threads">
-                <h3>线程状态</h3>
+            <section class="lane lane-threads" aria-labelledby="threadLaneTitle">
+                <h3 id="threadLaneTitle">线程泳道</h3>
                 <div id="threadLane" class="threads"></div>
             </section>
 
-            <section class="lane lane-queue">
-                <h3>Sync Queue（双向链表，prev/next）</h3>
+            <section class="lane lane-queue" aria-labelledby="syncLaneTitle">
+                <h3 id="syncLaneTitle">Sync Queue：双向链表</h3>
                 <div id="queueWrap" class="queue-wrap"></div>
             </section>
         </article>
 
-        <aside class="explain card">
+        <aside class="explain" aria-labelledby="stepTitle">
             <h2 id="stepTitle">-</h2>
             <p id="stepSummary" class="summary">-</p>
             <div id="focusBox" class="focus-box">-</div>
@@ -750,49 +976,29 @@
                 <ul id="nextList"></ul>
             </section>
 
-            <div class="note">说明：这是教学化 “逐指令” 视图，聚焦 AQS 主干路径（acquire / acquireShared / release / releaseShared）+ 独立语义分支</div>
+            <section class="detail">
+                <h3>位运算与语义速记</h3>
+                <ul id="legendList"></ul>
+            </section>
         </aside>
-    </section>
-
-    <section class="timeline-card card">
-        <div class="timeline-head">
-            <h3>完整时间线（可点击跳转）</h3>
-            <span id="stepCounter">-</span>
-        </div>
-        <div id="timeline" class="timeline"></div>
-    </section>
-
-    <section class="timeline-card card legend">
-        <div class="timeline-head">
-            <h3>位运算与语义速记</h3>
-        </div>
-        <ul>
-            <li>SHARED_UNIT = 1 &lt;&lt; 16，即每获得 1 个读锁，state 增加 65536</li>
-            <li>exclusiveCount(state) = state &amp; 0xFFFF；sharedCount(state) = state &gt;&gt;&gt; 16</li>
-            <li>写锁可重入只增加低 16 位；读锁并发增加高 16 位</li>
-            <li>读释放只有在总读计数归零时才返回 true，从而触发 releaseShared 的传播唤醒</li>
-            <li>setHeadAndPropagate 的触发判定：<strong>propagate &gt; 0</strong>，或<strong>旧/新 head 为 null</strong>，或<strong>旧/新 head.waitStatus &lt; 0</strong></li>
-            <li>读锁重入计数有三层：firstReader / cachedHoldCounter / ThreadLocalHoldCounter</li>
-            <li>降级支持（写-&gt;读），升级不支持（读-&gt;写，可能自阻塞）</li>
-        </ul>
-    </section>
+    </main>
 </div>
 
 <script>
 (() => {
     const flowRows = {
         write: [
-            {id: "w_lock", label: "WriteLock.lock"},
-            {id: "w_try", label: "tryAcquire(write)"},
-            {id: "w_enq", label: "addWaiter(EXCLUSIVE)"},
+            {id: "w_lock", label: "lock"},
+            {id: "w_try", label: "tryAcquire"},
+            {id: "w_enq", label: "EXCLUSIVE"},
             {id: "w_park", label: "park"},
-            {id: "w_unpark", label: "release(write) / 条件 unparkSuccessor"}
+            {id: "w_unpark", label: "release"}
         ],
         read: [
-            {id: "r_lock", label: "ReadLock.lock"},
-            {id: "r_try", label: "tryAcquireShared/fullTry"},
-            {id: "r_enq", label: "addWaiter(SHARED)"},
-            {id: "r_head", label: "setHeadAndPropagate"},
+            {id: "r_lock", label: "lock"},
+            {id: "r_try", label: "tryShared"},
+            {id: "r_enq", label: "SHARED"},
+            {id: "r_head", label: "propagate"},
             {id: "r_rel", label: "releaseShared"}
         ]
     };
@@ -1659,13 +1865,232 @@
         }
     ];
 
+    const stepMeta = [
+        {
+            group: "初始化",
+            groupKey: "init",
+            phase: "状态编码",
+            action: "初始化 state=0，读写计数均为空",
+            invariant: "高 16 位是读计数，低 16 位是写重入计数",
+            result: "读写锁空闲",
+            effect: "write"
+        },
+        {
+            group: "写锁重入",
+            groupKey: "write",
+            phase: "首次写锁",
+            action: "T1 CAS state 0->1，写入 owner",
+            invariant: "写锁是独占模式，owner 只在获取成功后写入",
+            result: "T1 持有 1 层写锁",
+            effect: "cas"
+        },
+        {
+            group: "写锁重入",
+            groupKey: "write",
+            phase: "同线程重入",
+            action: "T1 写锁重入，低 16 位递增",
+            invariant: "重入只增加写计数，不重新入队",
+            result: "T1 写计数=2",
+            effect: "write"
+        },
+        {
+            group: "读锁排队",
+            groupKey: "read_wait",
+            phase: "共享入队",
+            action: "T2 读锁被写锁挡住，创建 SHARED 节点",
+            invariant: "他线程持写锁时，读锁不能越过 owner",
+            result: "N2(SHARED) 入队",
+            effect: "enqueue"
+        },
+        {
+            group: "读锁排队",
+            groupKey: "read_wait",
+            phase: "SIGNAL 协议",
+            action: "N2 先把前驱 H 标为 SIGNAL",
+            invariant: "AQS 先建立唤醒协议，再允许 park",
+            result: "H.waitStatus=SIGNAL",
+            effect: "cas"
+        },
+        {
+            group: "读锁排队",
+            groupKey: "read_wait",
+            phase: "park 阻塞",
+            action: "N2 第二轮确认 SIGNAL 后进入 park",
+            invariant: "节点入队不等于获取锁，只是等待资格",
+            result: "T2 PARKED",
+            effect: "park"
+        },
+        {
+            group: "读锁排队",
+            groupKey: "read_wait",
+            phase: "共享尾插",
+            action: "T3 追加 SHARED 节点 N3 并 park",
+            invariant: "共享节点也按 FIFO 双向链表排队",
+            result: "N3(SHARED) 阻塞",
+            effect: "enqueue"
+        },
+        {
+            group: "写锁释放",
+            groupKey: "write_release",
+            phase: "部分释放",
+            action: "T1 第一次 unlock 只减少写重入计数",
+            invariant: "写计数未归零时不会唤醒队列后继",
+            result: "写计数降为 1",
+            effect: "write"
+        },
+        {
+            group: "写锁释放",
+            groupKey: "write_release",
+            phase: "完全释放",
+            action: "T1 第二次 unlock 清 owner 并唤醒 N2",
+            invariant: "free=true 后才进入 release 唤醒路径",
+            result: "T2 READY",
+            effect: "unpark"
+        },
+        {
+            group: "共享传播",
+            groupKey: "shared",
+            phase: "N2 成 head",
+            action: "N2 获取读锁，setHeadAndPropagate 唤醒 N3",
+            invariant: "共享获取成功后可继续传播给共享后继",
+            result: "T2 持读锁，N3 READY",
+            effect: "sethead"
+        },
+        {
+            group: "共享传播",
+            groupKey: "shared",
+            phase: "并发读者",
+            action: "N3 获取读锁，读计数升到 2",
+            invariant: "读锁共享模式允许多个读线程并发持有",
+            result: "读计数=2",
+            effect: "sethead"
+        },
+        {
+            group: "写者等待",
+            groupKey: "writer_wait",
+            phase: "写者入队",
+            action: "T4 写锁被读计数挡住，EXCLUSIVE 入队",
+            invariant: "sharedCount>0 时写锁不能获取",
+            result: "N4(EXCLUSIVE) PARKED",
+            effect: "enqueue"
+        },
+        {
+            group: "写者等待",
+            groupKey: "writer_wait",
+            phase: "非最后读者",
+            action: "T2 释放读锁，读计数 2->1",
+            invariant: "不是最后读者时 releaseShared 返回 false",
+            result: "读计数=1，N4 继续等",
+            effect: "cas"
+        },
+        {
+            group: "写者等待",
+            groupKey: "writer_wait",
+            phase: "最后读者",
+            action: "T3 释放最后读锁，唤醒写节点 N4",
+            invariant: "读计数归零后写者才有机会继续",
+            result: "N4 READY",
+            effect: "unpark"
+        },
+        {
+            group: "写者等待",
+            groupKey: "writer_wait",
+            phase: "写锁恢复",
+            action: "N4 CAS state 0->1，成为写锁 owner",
+            invariant: "唤醒后仍需重新竞争，成功后才 setHead",
+            result: "T4 持有写锁",
+            effect: "sethead"
+        },
+        {
+            group: "写者等待",
+            groupKey: "writer_wait",
+            phase: "主线闭环",
+            action: "T4 释放写锁，主流程回到空闲",
+            invariant: "head 节点保留为后续竞争的队列哨兵",
+            result: "读写锁再次空闲",
+            effect: "complete"
+        },
+        {
+            group: "读锁重入",
+            groupKey: "read_reenter",
+            phase: "前置快照",
+            action: "写者排队时，读重入转入 fullTry 分支",
+            invariant: "readerShouldBlock 限制新读者，不挡已有读者重入",
+            result: "重入走 fullTry",
+            effect: "miss"
+        },
+        {
+            group: "读锁重入",
+            groupKey: "read_reenter",
+            phase: "firstReader",
+            action: "T2 通过 firstReader 分支读锁重入",
+            invariant: "firstReaderHoldCount 记录首读线程重入层数",
+            result: "T2 读持有=2",
+            effect: "cas"
+        },
+        {
+            group: "读锁重入",
+            groupKey: "read_reenter",
+            phase: "HoldCounter",
+            action: "T3 通过 cached/ThreadLocal 计数完成重入",
+            invariant: "非首读线程必须证明自己已持有读锁",
+            result: "T3 读持有=2",
+            effect: "cas"
+        },
+        {
+            group: "降级升级",
+            groupKey: "downgrade",
+            phase: "先拿读锁",
+            action: "T1 持写锁时再获取读锁，形成 W+R",
+            invariant: "写锁降级顺序是先拿读锁，再释放写锁",
+            result: "T1 同持 W+R",
+            effect: "cas"
+        },
+        {
+            group: "降级升级",
+            groupKey: "downgrade",
+            phase: "完成降级",
+            action: "T1 释放写锁，仅保留读锁",
+            invariant: "降级后仍可读，写者需等读计数归零",
+            result: "降级为读锁",
+            effect: "write"
+        },
+        {
+            group: "降级升级",
+            groupKey: "upgrade",
+            phase: "升级自陷",
+            action: "T2 持读锁再请求写锁，入队后 park",
+            invariant: "读->写阻塞式升级不支持，会自陷死锁",
+            result: "升级自陷死锁",
+            effect: "exception"
+        }
+    ];
+
+    if (stepMeta.length !== steps.length) {
+        throw new Error("stepMeta 与 steps 数量不一致");
+    }
+
+    const legendLines = [
+        "SHARED_UNIT = 1 << 16，每获得 1 个读锁，state 增加 65536",
+        "exclusiveCount(state) = state & 0xFFFF；sharedCount(state) = state >>> 16",
+        "写锁可重入只增加低 16 位；读锁并发增加高 16 位",
+        "读释放只有总读计数归零时才返回 true，从而触发 releaseShared 传播唤醒",
+        "setHeadAndPropagate 的判定：propagate>0，或旧/新 head 为空，或旧/新 head.waitStatus<0",
+        "读锁重入计数有三层：firstReader / cachedHoldCounter / ThreadLocalHoldCounter",
+        "降级支持（写->读），升级不支持（读->写，可能自阻塞）"
+    ];
+
+
     const el = {
         prevBtn: document.getElementById("prevBtn"),
         nextBtn: document.getElementById("nextBtn"),
         resetBtn: document.getElementById("resetBtn"),
+        actionValue: document.getElementById("actionValue"),
+        invariantValue: document.getElementById("invariantValue"),
         stateValue: document.getElementById("stateValue"),
-        ownerValue: document.getElementById("ownerValue"),
-        queueValue: document.getElementById("queueValue"),
+        writeValue: document.getElementById("writeValue"),
+        readValue: document.getElementById("readValue"),
+        resultValue: document.getElementById("resultValue"),
         threadLane: document.getElementById("threadLane"),
         queueWrap: document.getElementById("queueWrap"),
         stepTitle: document.getElementById("stepTitle"),
@@ -1676,16 +2101,19 @@
         casList: document.getElementById("casList"),
         deltaList: document.getElementById("deltaList"),
         nextList: document.getElementById("nextList"),
+        legendList: document.getElementById("legendList"),
         timeline: document.getElementById("timeline"),
         stepCounter: document.getElementById("stepCounter"),
         stage: document.getElementById("stage"),
-        explain: document.querySelector(".explain"),
         flowWrite: document.getElementById("flowWrite"),
         flowRead: document.getElementById("flowRead")
     };
 
     let current = 0;
-    let fixedPanelHeight = null;
+
+    function fullStep(index) {
+        return Object.assign({}, steps[index], stepMeta[index]);
+    }
 
     function stateClass(state) {
         const s = String(state || "").toUpperCase();
@@ -1700,6 +2128,38 @@
         if (ws > 0) return "pos";
         if (ws < 0) return "neg";
         return "zero";
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function formatDeltaLine(line) {
+        const escaped = escapeHtml(line);
+        return escaped.replace(/\s-&gt;\s/g, ' <span class="queue-change-arrow">-&gt;</span> ');
+    }
+
+    function metric(source, key) {
+        const text = String(source || "");
+        const start = `${key}=`;
+        const index = text.indexOf(start);
+        if (index < 0) return "-";
+        const rest = text.slice(index + start.length);
+        const boundary = rest.search(/,\s*[A-Za-z][A-Za-z0-9]*=/);
+        return (boundary >= 0 ? rest.slice(0, boundary) : rest).trim();
+    }
+
+    function writeSummary(step) {
+        return `owner=${metric(step.owner, "writeOwner")}, holds=${metric(step.owner, "writeHolds")}`;
+    }
+
+    function readSummary(step) {
+        return `holds=${metric(step.owner, "readHolds")}`;
     }
 
     function flashStage() {
@@ -1725,24 +2185,23 @@
         });
     }
 
-    function buildBackwardChain(nodes) {
-        if (!nodes || nodes.length === 0) return "(空)";
-        return nodes.slice().reverse().map((n) => n.id).join(" -> ");
-    }
-
     function renderQueue(step) {
         el.queueWrap.innerHTML = "";
         const nodes = step.queue || [];
+
         if (nodes.length === 0) {
             const empty = document.createElement("div");
             empty.className = "queue-empty";
-            empty.textContent = "当前无节点（尚未创建 Sync Queue）";
+            empty.innerHTML = `
+                <strong>Sync Queue 为空</strong>
+                <span>head=null, tail=null</span>
+            `;
             el.queueWrap.appendChild(empty);
             return;
         }
 
-        const forward = document.createElement("div");
-        forward.className = "queue-forward";
+        const chain = document.createElement("div");
+        chain.className = "queue-chain";
 
         nodes.forEach((node, index) => {
             const card = document.createElement("article");
@@ -1765,44 +2224,21 @@
                 <div class="node-line"><span class="label">prev:</span> ${node.prev}</div>
                 <div class="node-line"><span class="label">next:</span> ${node.next}</div>
             `;
-            forward.appendChild(card);
+            chain.appendChild(card);
 
             if (index < nodes.length - 1) {
-                const arrow = document.createElement("span");
-                arrow.className = "arrow";
-                arrow.textContent = "→";
-                forward.appendChild(arrow);
+                const link = document.createElement("div");
+                link.className = "link-pair";
+                link.setAttribute("aria-hidden", "true");
+                link.innerHTML = `
+                    <span class="link-arrow">→</span>
+                    <span class="link-arrow">←</span>
+                `;
+                chain.appendChild(link);
             }
         });
 
-        el.queueWrap.appendChild(forward);
-
-        const pointer = document.createElement("div");
-        pointer.className = "pointer-panel";
-
-        const title1 = document.createElement("div");
-        title1.className = "pointer-title";
-        title1.textContent = "双向指针快照";
-        pointer.appendChild(title1);
-
-        nodes.forEach((node) => {
-            const line = document.createElement("div");
-            line.className = "pointer-line";
-            line.textContent = `${node.id}.prev=${node.prev}, ${node.id}.next=${node.next}`;
-            pointer.appendChild(line);
-        });
-
-        const title2 = document.createElement("div");
-        title2.className = "pointer-title";
-        title2.textContent = "反向遍历（tail -> head）";
-        pointer.appendChild(title2);
-
-        const backward = document.createElement("div");
-        backward.className = "pointer-line";
-        backward.textContent = buildBackwardChain(nodes);
-        pointer.appendChild(backward);
-
-        el.queueWrap.appendChild(pointer);
+        el.queueWrap.appendChild(chain);
     }
 
     function renderList(target, lines, emptyText) {
@@ -1817,57 +2253,119 @@
 
         lines.forEach((line) => {
             const li = document.createElement("li");
-            li.textContent = line;
+            if (target === el.deltaList) {
+                li.innerHTML = formatDeltaLine(line);
+            } else {
+                li.textContent = line;
+            }
             target.appendChild(li);
         });
     }
 
     function renderTimeline() {
         el.timeline.innerHTML = "";
-        steps.forEach((step, index) => {
+        let activeChip = null;
+        let previousGroup = null;
+        const currentGroup = fullStep(current).group;
+        steps.forEach((rawStep, index) => {
+            const step = fullStep(index);
+            if (step.group !== previousGroup) {
+                const groupLabel = document.createElement("div");
+                const groupLastIndex = stepMeta.reduce((last, item, itemIndex) => {
+                    return item.group === step.group ? itemIndex : last;
+                }, -1);
+                const groupClasses = ["timeline-group"];
+                if (groupLastIndex < current) groupClasses.push("done");
+                if (step.group === currentGroup) groupClasses.push("active");
+                groupLabel.className = groupClasses.join(" ");
+                groupLabel.textContent = step.group;
+                groupLabel.setAttribute("role", "heading");
+                groupLabel.setAttribute("aria-level", "3");
+                el.timeline.appendChild(groupLabel);
+                previousGroup = step.group;
+            }
+
             const chip = document.createElement("button");
             chip.type = "button";
             const classes = ["step-chip"];
             if (index < current) classes.push("done");
             if (index === current) classes.push("active");
+            const label = rawStep.title.replace(/^\d+\)\s*/, "");
             chip.className = classes.join(" ");
-            chip.textContent = step.title.replace(/^\d+\)\s*/, "");
+            chip.setAttribute("aria-label", `跳转到第 ${index + 1} 步：${step.group} / ${step.phase}，${label}`);
+            if (index === current) {
+                chip.setAttribute("aria-current", "step");
+                activeChip = chip;
+            }
+            const labelWrap = document.createElement("span");
+            const title = document.createElement("span");
+            const phase = document.createElement("span");
+            labelWrap.className = "step-chip-copy";
+            title.className = "step-chip-title";
+            phase.className = "step-chip-phase";
+            title.textContent = label;
+            phase.textContent = step.phase;
+            labelWrap.appendChild(title);
+            labelWrap.appendChild(phase);
+            chip.appendChild(labelWrap);
             chip.addEventListener("click", () => {
                 current = index;
                 render(true);
             });
             el.timeline.appendChild(chip);
         });
+
+        if (activeChip) {
+            activeChip.scrollIntoView({block: "nearest", inline: "nearest"});
+        }
     }
 
     function renderFlow(step) {
-        function paintRow(target, nodes) {
+        function paintRow(target, label, nodes) {
+            const active = new Set(step.flowActive || []);
             target.innerHTML = "";
+            target.className = `flow-row${nodes.some((node) => active.has(node.id)) ? " active" : ""}`;
+
+            const rowLabel = document.createElement("div");
+            rowLabel.className = "flow-label";
+            rowLabel.textContent = label;
+            target.appendChild(rowLabel);
+
+            const track = document.createElement("div");
+            track.className = "flow-track";
+            target.appendChild(track);
+
             nodes.forEach((node, index) => {
                 const box = document.createElement("div");
-                box.className = `flow-node${step.flowActive.includes(node.id) ? " active" : ""}`;
+                box.className = `flow-node${active.has(node.id) ? " active" : ""}`;
+                box.title = node.title || node.label;
                 box.textContent = node.label;
-                target.appendChild(box);
+                track.appendChild(box);
 
                 if (index < nodes.length - 1) {
                     const arrow = document.createElement("span");
                     arrow.className = "flow-arrow";
                     arrow.textContent = "→";
-                    target.appendChild(arrow);
+                    track.appendChild(arrow);
                 }
             });
         }
 
-        paintRow(el.flowWrite, flowRows.write);
-        paintRow(el.flowRead, flowRows.read);
+        paintRow(el.flowWrite, "写锁", flowRows.write);
+        paintRow(el.flowRead, "读锁", flowRows.read);
     }
 
     function render(animate) {
-        const step = steps[current];
+        const step = fullStep(current);
 
+        el.stage.dataset.effect = step.effect || "none";
+        el.stage.dataset.group = step.groupKey || "none";
+        el.actionValue.textContent = step.action;
+        el.invariantValue.textContent = step.invariant;
         el.stateValue.textContent = step.state;
-        el.ownerValue.textContent = step.owner;
-        el.queueValue.textContent = step.queueSummary;
+        el.writeValue.textContent = writeSummary(step);
+        el.readValue.textContent = readSummary(step);
+        el.resultValue.textContent = step.result;
 
         renderFlow(step);
         renderThreads(step);
@@ -1882,6 +2380,7 @@
         renderList(el.casList, step.cas, "本步无 CAS");
         renderList(el.deltaList, step.delta, "本步无字段变化");
         renderList(el.nextList, step.next, "流程结束");
+        renderList(el.legendList, legendLines, "暂无速记");
 
         renderTimeline();
         el.stepCounter.textContent = `第 ${current + 1} / ${steps.length} 步`;
@@ -1889,34 +2388,7 @@
         el.prevBtn.disabled = current === 0;
         el.nextBtn.disabled = current === steps.length - 1;
 
-        if (fixedPanelHeight !== null) {
-            const h = `${fixedPanelHeight}px`;
-            el.stage.style.height = h;
-            el.explain.style.height = h;
-        }
-
         if (animate) flashStage();
-    }
-
-    function computeFixedPanelHeight() {
-        const savedCurrent = current;
-
-        fixedPanelHeight = null;
-        el.stage.style.height = "auto";
-        el.explain.style.height = "auto";
-
-        let maxStage = 0;
-        let maxExplain = 0;
-
-        for (let i = 0; i < steps.length; i += 1) {
-            current = i;
-            render(false);
-            maxStage = Math.max(maxStage, el.stage.scrollHeight);
-            maxExplain = Math.max(maxExplain, el.explain.scrollHeight);
-        }
-
-        fixedPanelHeight = Math.max(maxStage, maxExplain);
-        current = savedCurrent;
     }
 
     function prev() {
@@ -1960,17 +2432,6 @@
         }
     });
 
-    let resizeTimer = null;
-    window.addEventListener("resize", () => {
-        window.clearTimeout(resizeTimer);
-        resizeTimer = window.setTimeout(() => {
-            computeFixedPanelHeight();
-            render(false);
-        }, 120);
-    });
-
-    render(false);
-    computeFixedPanelHeight();
     render(false);
 })();
 </script>

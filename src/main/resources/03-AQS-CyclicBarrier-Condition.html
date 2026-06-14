@@ -6,18 +6,25 @@
     <title>AQS 条件变量动画流程图（CyclicBarrier）</title>
     <style>
         :root {
-            --bg: #f8fafc;
-            --card: #ffffff;
-            --soft: #f1f5f9;
-            --line: #dbe3ef;
-            --text: #0f172a;
-            --muted: #475569;
+            --bg: #f6f7f9;
+            --surface: #ffffff;
+            --surface-soft: #f8fafc;
+            --line: #d8e0ec;
+            --line-strong: #b9c6d8;
+            --text: #111827;
+            --muted: #5f6b7a;
             --blue: #2563eb;
-            --violet: #7c3aed;
-            --green: #16a34a;
-            --orange: #ea580c;
+            --blue-soft: #eef5ff;
+            --green: #15803d;
+            --green-soft: #ecfdf3;
+            --orange: #c2410c;
+            --orange-soft: #fff4e6;
             --red: #dc2626;
-            --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+            --red-soft: #fff1f2;
+            --violet: #6d28d9;
+            --violet-soft: #f5f3ff;
+            --shadow: 0 8px 22px rgba(17, 24, 39, 0.07);
+            --radius: 8px;
         }
 
         * {
@@ -27,91 +34,100 @@
         body {
             margin: 0;
             font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
-            background: linear-gradient(165deg, #eaf2ff 0%, var(--bg) 56%);
+            background: var(--bg);
             color: var(--text);
-            line-height: 1.56;
+            line-height: 1.5;
+        }
+
+        button {
+            font: inherit;
         }
 
         .app {
-            width: min(1460px, calc(100vw - 20px));
-            margin: 12px auto 26px;
+            width: min(1540px, calc(100vw - 24px));
+            min-width: 1420px;
+            height: 100vh;
+            margin: 0 auto;
+            padding: 12px 0 18px;
             display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
             gap: 10px;
+            overflow: hidden;
         }
 
         .app > *,
-        .layout > *,
+        .topbar > *,
+        .workspace > *,
         .stage > * {
             min-width: 0;
         }
 
-        .card {
-            background: var(--card);
+        .topbar,
+        .timeline-panel,
+        .stage,
+        .explain {
+            background: var(--surface);
             border: 1px solid var(--line);
-            border-radius: 14px;
+            border-radius: var(--radius);
             box-shadow: var(--shadow);
         }
 
+        .topbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+        }
+
         .hero {
-            padding: 14px 16px;
+            display: grid;
+            gap: 4px;
+        }
+
+        .eyebrow {
+            margin: 0;
+            color: var(--blue);
+            font-size: 12px;
+            font-weight: 800;
         }
 
         .hero h1 {
             margin: 0;
-            font-size: clamp(22px, 2.6vw, 31px);
-            line-height: 1.26;
+            font-size: 24px;
+            line-height: 1.25;
         }
 
         .hero p {
-            margin: 7px 0 0;
+            margin: 0;
             color: var(--muted);
             font-size: 13px;
         }
 
-        .hero .tip {
-            margin-top: 8px;
-            padding: 7px 10px;
-            background: var(--soft);
-            border: 1px solid #d6e2f6;
-            border-radius: 9px;
-            font-size: 12px;
-            color: #334155;
-        }
-
         .controls {
-            padding: 10px;
             display: flex;
             flex-wrap: wrap;
+            justify-content: flex-end;
             align-items: center;
             gap: 8px;
         }
 
-        .model-pill {
-            border: 1px solid #bfdbfe;
-            background: #eff6ff;
-            color: #1e3a8a;
-            border-radius: 999px;
-            padding: 6px 10px;
-            font-size: 12px;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-
         .btn {
-            border: 1px solid #c8d5ea;
+            min-height: 34px;
+            border: 1px solid var(--line-strong);
             background: #ffffff;
-            color: #1e293b;
-            border-radius: 9px;
-            padding: 7px 11px;
+            color: #243044;
+            border-radius: var(--radius);
+            padding: 6px 10px;
             font-size: 13px;
-            font-weight: 700;
+            font-weight: 800;
             cursor: pointer;
-            transition: 0.18s ease;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
         }
 
         .btn:hover {
-            border-color: #93c5fd;
-            background: #eff6ff;
+            border-color: #93b5e8;
+            background: var(--blue-soft);
             color: #1d4ed8;
         }
 
@@ -122,112 +138,392 @@
         }
 
         .btn:disabled {
-            opacity: 0.55;
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
-        .control-note {
-            margin-left: auto;
-            color: #64748b;
+        .model-pill,
+        .control-note,
+        .counter-pill {
+            border-radius: var(--radius);
+            padding: 6px 9px;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 800;
         }
 
-        .layout {
+        .model-pill {
+            border: 1px solid #bdd3f5;
+            background: var(--blue-soft);
+            color: #1e3a8a;
+        }
+
+        .control-note {
+            color: #64748b;
+            background: var(--surface-soft);
+            border: 1px solid #e2e8f0;
+        }
+
+        .counter-pill {
+            color: #36506f;
+            background: #f0f6ff;
+            border: 1px solid #c8daf5;
+            white-space: nowrap;
+        }
+
+        .workspace {
             display: grid;
-            grid-template-columns: 1.55fr 1fr;
+            grid-template-columns: 240px minmax(760px, 1fr) 370px;
+            grid-template-areas: "timeline stage explain";
             gap: 10px;
-            align-items: start;
+            align-items: stretch;
+            min-height: 0;
+        }
+
+        .timeline-panel,
+        .stage,
+        .explain {
+            height: auto;
+            min-height: 0;
+            max-height: none;
+        }
+
+        .timeline-panel {
+            grid-area: timeline;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            overflow: hidden;
+        }
+
+        .timeline-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            padding: 10px 10px 8px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .timeline-head h2 {
+            margin: 0;
+            font-size: 14px;
+            color: #243044;
+        }
+
+        .timeline-head span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .timeline {
+            counter-reset: step;
+            display: grid;
+            align-content: start;
+            gap: 7px;
+            padding: 10px;
+            overflow: auto;
+        }
+
+        .timeline-group {
+            margin: 7px 0 1px;
+            border: 1px solid #dce4ef;
+            border-radius: var(--radius);
+            background: #f8fafc;
+            color: #475569;
+            padding: 5px 8px;
+            font-size: 11px;
+            font-weight: 900;
+        }
+
+        .timeline-group.done {
+            border-color: #b7e4c4;
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .timeline-group.active {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .step-chip {
+            counter-increment: step;
+            width: 100%;
+            height: max-content;
+            min-height: 68px;
+            border: 1px solid #d1dae8;
+            background: #ffffff;
+            color: #334155;
+            border-radius: var(--radius);
+            padding: 8px 9px;
+            display: grid;
+            grid-template-columns: 32px minmax(0, 1fr);
+            gap: 8px;
+            align-items: center;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .step-chip::before {
+            content: counter(step);
+            width: 30px;
+            height: 30px;
+            display: grid;
+            place-items: center;
+            border-radius: 999px;
+            background: #e9eef6;
+            color: #475569;
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .step-chip:hover {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .step-chip.done {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .step-chip.done::before {
+            background: #d9f7e3;
+            color: var(--green);
+        }
+
+        .step-chip.active {
+            border-color: #1d4ed8;
+            background: #1d4ed8;
+            color: #ffffff;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+        }
+
+        .step-chip.active::before {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+        }
+
+        .step-chip-title,
+        .step-chip-phase {
+            min-width: 0;
+        }
+
+        .step-chip-copy {
+            display: grid;
+            gap: 3px;
+            align-self: center;
+            min-width: 0;
+            line-height: 1.34;
+        }
+
+        .step-chip-title {
+            overflow-wrap: anywhere;
+        }
+
+        .step-chip-phase {
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 800;
+            line-height: 1.3;
+            white-space: normal;
+            overflow: visible;
+        }
+
+        .step-chip.done .step-chip-phase {
+            color: #15803d;
+        }
+
+        .step-chip.active .step-chip-phase {
+            color: rgba(255, 255, 255, 0.76);
         }
 
         .stage {
+            grid-area: stage;
             padding: 10px;
             display: grid;
-            grid-template-rows: auto 196px minmax(0, 1fr) minmax(0, 1fr);
+            grid-template-rows: auto auto auto minmax(0, 1fr);
             gap: 8px;
-            transition: box-shadow 0.18s ease, border-color 0.18s ease;
-            align-content: start;
+            overflow: hidden;
+            transition: box-shadow 0.16s ease, border-color 0.16s ease;
         }
 
         .stage.flash {
-            border-color: #93c5fd;
+            border-color: #93b5e8;
             box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13), var(--shadow);
+        }
+
+        .step-context {
+            height: 62px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .context-card {
+            height: 62px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 7px 8px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            align-content: start;
+            overflow: hidden;
+            transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .context-card span {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .context-card strong {
+            display: block;
+            margin-top: 4px;
+            color: #111827;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        .context-value {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stage[data-effect="cas"] .context-action,
+        .stage[data-effect="signal"] .context-action {
+            border-color: #93c5fd;
+            background: var(--blue-soft);
+        }
+
+        .stage[data-effect="write"] .context-action {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+        }
+
+        .stage[data-effect="miss"] .context-action {
+            border-color: #c7d2e3;
+            background: var(--surface-soft);
+        }
+
+        .stage[data-effect="enqueue"] .context-action,
+        .stage[data-effect="sethead"] .context-action {
+            border-color: #c4b5fd;
+            background: var(--violet-soft);
+        }
+
+        .stage[data-effect="park"] .context-action,
+        .stage[data-effect="unpark"] .context-action {
+            border-color: #fed7aa;
+            background: var(--orange-soft);
+        }
+
+        .stage[data-effect="exception"] .context-action {
+            border-color: #fca5a5;
+            background: var(--red-soft);
+        }
+
+        .stage[data-effect="complete"] .context-action {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+        }
+
+        .stage[data-effect="cas"] .status-state,
+        .stage[data-effect="write"] .status-state,
+        .stage[data-effect="unpark"] .status-state,
+        .stage[data-effect="sethead"] .status-state {
+            border-color: #93c5fd;
+            background: #f0f6ff;
         }
 
         .status-grid {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 7px;
         }
 
         .status {
+            min-height: 62px;
             border: 1px solid var(--line);
-            border-radius: 10px;
-            background: #f8fbff;
-            padding: 7px;
-            min-height: 72px;
+            border-radius: var(--radius);
+            background: var(--surface-soft);
+            padding: 7px 8px;
+            overflow: hidden;
         }
 
         .status span {
             display: block;
+            color: var(--muted);
             font-size: 11px;
-            color: #64748b;
+            font-weight: 700;
         }
 
         .status strong {
             display: block;
             margin-top: 4px;
+            color: #111827;
             font-size: 13px;
-            line-height: 1.36;
-            color: #0f172a;
+            line-height: 1.35;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        .status-count strong,
-        .status-owner strong,
-        .status-result strong {
+        .status-state strong {
             font-family: Menlo, Consolas, monospace;
             font-variant-numeric: tabular-nums;
         }
 
         .lane {
+            min-height: 0;
             border: 1px solid var(--line);
-            border-radius: 10px;
+            border-radius: var(--radius);
             background: #fcfdff;
             padding: 8px;
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 7px;
         }
 
         .lane h3 {
-            margin: 0 0 7px;
-            font-size: 13px;
+            margin: 0;
             color: #334155;
+            font-size: 13px;
         }
 
         .lane-threads {
-            min-height: 196px;
+            min-height: 120px;
         }
 
         .lane-queue {
-            min-height: 236px;
+            overflow: hidden;
         }
 
         .threads {
             display: grid;
-            gap: 7px;
-            grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             grid-auto-rows: 76px;
-            align-content: start;
-            flex: 1;
+            gap: 7px;
         }
 
         .thread {
-            border: 1px solid #d9e3f2;
-            border-radius: 9px;
+            height: 76px;
+            border: 1px solid #d8e0ec;
+            border-radius: var(--radius);
             background: #ffffff;
             padding: 7px;
-            height: 76px;
-            transition: 0.18s ease;
+            overflow: hidden;
         }
 
         .thread.active {
@@ -243,16 +539,15 @@
         }
 
         .thread-name {
-            font-weight: 700;
             font-size: 12px;
+            font-weight: 800;
         }
 
         .badge {
             border-radius: 999px;
             padding: 2px 7px;
             font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.3px;
+            font-weight: 800;
         }
 
         .b-running {
@@ -266,12 +561,12 @@
         }
 
         .b-parked {
-            background: #ffedd5;
+            background: var(--orange-soft);
             color: #9a3412;
         }
 
         .b-idle {
-            background: #e2e8f0;
+            background: #e5e9f0;
             color: #475569;
         }
 
@@ -282,53 +577,88 @@
 
         .thread p {
             margin: 6px 0 0;
-            font-size: 11px;
             color: #475569;
+            font-size: 11px;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
         }
 
         .queue-wrap {
+            min-height: 0;
             display: grid;
-            grid-template-rows: auto auto;
-            gap: 6px;
+            gap: 8px;
             align-content: start;
+            overflow: auto;
+            padding-right: 2px;
         }
 
         .queue-empty {
-            border: 1px dashed #cbd5e1;
-            border-radius: 8px;
-            padding: 7px 9px;
-            font-size: 12px;
-            color: #64748b;
-            background: #f8fafc;
-            min-height: 72px;
-            display: flex;
-            align-items: center;
+            min-height: 124px;
+            border: 1px dashed #c7d2e3;
+            border-radius: var(--radius);
+            padding: 10px;
+            display: grid;
+            place-content: center;
+            gap: 4px;
+            background: var(--surface-soft);
+            text-align: center;
         }
 
-        .queue-forward {
+        .queue-empty strong {
+            color: #334155;
+            font-size: 13px;
+        }
+
+        .queue-empty span {
+            color: var(--muted);
+            font-family: Menlo, Consolas, monospace;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .queue-chain {
             display: flex;
             flex-wrap: wrap;
-            gap: 7px;
+            gap: 8px;
             align-items: center;
             align-content: flex-start;
             min-height: 0;
         }
 
-        .arrow {
-            color: #94a3b8;
-            font-size: 15px;
-            font-weight: 700;
-            line-height: 1;
+        .link-pair {
+            width: 46px;
+            display: grid;
+            gap: 4px;
+            justify-items: center;
+            align-content: center;
+            color: #64748b;
             user-select: none;
         }
 
+        .link-arrow {
+            display: block;
+            font-size: 23px;
+            font-weight: 900;
+            line-height: 0.82;
+            letter-spacing: 0;
+        }
+
         .node {
-            width: 198px;
+            width: 190px;
             border: 1px solid #d2dceb;
-            border-radius: 10px;
+            border-radius: var(--radius);
             background: #ffffff;
             padding: 7px;
-            transition: 0.18s ease;
+        }
+
+        .node.head {
+            border-color: #a78bfa;
+            background: var(--violet-soft);
+        }
+
+        .node.cancelled {
+            border-color: #fca5a5;
+            background: var(--red-soft);
         }
 
         .node.active {
@@ -336,49 +666,34 @@
             box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
         }
 
-        .node.head {
-            border-color: #a78bfa;
-            background: #f8f5ff;
-        }
-
-        .node.condition {
-            border-color: #93c5fd;
-            background: #f0f7ff;
-        }
-
-        .node.cancelled {
-            border-color: #fca5a5;
-            background: #fff1f2;
-        }
-
         .node-top {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 5px;
-            margin-bottom: 5px;
+            gap: 6px;
+            margin-bottom: 4px;
         }
 
         .node-title {
+            color: #111827;
             font-size: 12px;
-            font-weight: 700;
-            color: #0f172a;
+            font-weight: 900;
         }
 
         .node-role {
-            font-size: 10px;
             border-radius: 999px;
             padding: 1px 6px;
-            background: #e2e8f0;
+            background: #e5e9f0;
             color: #334155;
-            font-weight: 700;
+            font-size: 10px;
+            font-weight: 900;
             text-transform: uppercase;
         }
 
         .node-line {
-            font-size: 11px;
+            margin: 0;
             color: #334155;
-            margin: 1px 0;
+            font-size: 11px;
         }
 
         .node-line .label {
@@ -386,7 +701,7 @@
         }
 
         .ws {
-            font-weight: 700;
+            font-weight: 900;
         }
 
         .ws.neg {
@@ -398,73 +713,51 @@
         }
 
         .ws.pos {
-            color: #dc2626;
-        }
-
-        .pointer-panel {
-            border: 1px solid #dbe3ef;
-            border-radius: 8px;
-            background: #f8fafc;
-            padding: 7px 7px 10px;
-            display: grid;
-            gap: 5px;
-            min-height: 118px;
-            align-content: start;
-        }
-
-        .pointer-title {
-            font-size: 11px;
-            font-weight: 700;
-            color: #334155;
-        }
-
-        .pointer-line {
-            font-family: Menlo, Consolas, monospace;
-            font-size: 11px;
-            color: #1f2937;
-            line-height: 1.45;
+            color: var(--red);
         }
 
         .explain {
+            grid-area: explain;
             padding: 10px;
             display: grid;
-            gap: 8px;
             align-content: start;
+            gap: 8px;
+            overflow: auto;
         }
 
         .explain h2 {
             margin: 0;
-            font-size: 19px;
-            line-height: 1.34;
+            font-size: 18px;
+            line-height: 1.32;
         }
 
         .explain .summary {
             margin: 0;
-            font-size: 13px;
             color: var(--muted);
+            font-size: 13px;
         }
 
         .focus-box {
-            border: 1px solid #bfdbfe;
-            background: #eff6ff;
+            border: 1px solid #bdd3f5;
+            border-radius: var(--radius);
+            background: var(--blue-soft);
             color: #1e3a8a;
-            border-radius: 9px;
             padding: 7px 8px;
             font-size: 12px;
-            font-weight: 700;
+            font-weight: 800;
         }
 
         .detail {
-            border: 1px solid #dbe3ef;
-            border-radius: 9px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
             background: #ffffff;
-            padding: 7px;
+            padding: 8px;
         }
 
         .detail h3 {
             margin: 0 0 6px;
-            font-size: 12px;
             color: #334155;
+            font-size: 12px;
         }
 
         .detail ul {
@@ -477,136 +770,57 @@
 
         .detail li {
             border: 1px solid #e2e8f0;
-            border-radius: 7px;
-            background: #f8fafc;
+            border-radius: 6px;
+            background: var(--surface-soft);
             padding: 5px 7px;
-            font-size: 12px;
             color: #334155;
+            font-size: 12px;
             line-height: 1.45;
         }
 
-        .queue-change-arrow {
-            color: #ea580c;
-            font-weight: 800;
-        }
-
         .detail li.empty {
-            color: #64748b;
+            color: var(--muted);
             border-style: dashed;
         }
 
         .note {
-            border: 1px solid #dbe3ef;
-            border-radius: 9px;
-            background: #f8fafc;
-            padding: 7px;
-            font-size: 11px;
-            color: #475569;
-            line-height: 1.48;
-        }
-
-        .timeline-card {
-            padding: 10px;
-        }
-
-        .timeline-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            gap: 8px;
-            margin-bottom: 7px;
-        }
-
-        .timeline-head h3 {
-            margin: 0;
-            font-size: 13px;
-            color: #334155;
-        }
-
-        .timeline-head span {
+            color: var(--muted);
             font-size: 12px;
+        }
+
+
+        .stage {
+            grid-template-rows: auto auto auto minmax(0, 1fr) minmax(0, 1fr);
+        }
+
+        .status-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .node.condition {
+            border-color: #93c5fd;
+            background: #f0f7ff;
+        }
+
+        .node.condition.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .condition-link {
+            width: 34px;
+            display: grid;
+            place-items: center;
             color: #64748b;
+            font-size: 23px;
+            font-weight: 900;
+            line-height: 1;
+            user-select: none;
         }
 
-        .timeline {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 7px;
-            min-height: 74px;
-        }
-
-        .step-chip {
-            border: 1px solid #cbd5e1;
-            border-radius: 9px;
-            background: #ffffff;
-            color: #334155;
-            padding: 6px 10px;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: 0.18s ease;
-        }
-
-        .step-chip:hover {
-            border-color: #93c5fd;
-            background: #eff6ff;
-            color: #1d4ed8;
-        }
-
-        .step-chip.done {
-            border-color: #86efac;
-            background: #f0fdf4;
-            color: #166534;
-        }
-
-        .step-chip.active {
-            border-color: #93c5fd;
-            background: #eff6ff;
-            color: #1d4ed8;
-        }
-
-        @media (max-width: 1180px) {
-            .layout {
-                grid-template-columns: 1fr;
-            }
-
-            .control-note {
-                width: 100%;
-                margin-left: 0;
-            }
-
-            .status-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-        }
-
-        @media (max-width: 760px) {
-            .app {
-                width: calc(100% - 10px);
-                margin-top: 6px;
-            }
-
-            .stage {
-                grid-template-rows: auto auto auto auto;
-            }
-
-            .status-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .node {
-                width: 100%;
-            }
-
-            .queue-forward {
-                display: grid;
-                grid-template-columns: 1fr;
-            }
-
-            .arrow {
-                justify-self: center;
-                transform: rotate(90deg);
-            }
+        .queue-change-arrow {
+            color: #c2410c;
+            font-weight: 900;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -619,58 +833,80 @@
 </head>
 <body>
 <div class="app">
-    <section class="hero card">
-        <h1>AQS 条件变量动画流程图（以 CyclicBarrier 为实现）</h1>
-        <p>按 CyclicBarrier 的真实源码路径演示：<code>await() -> dowait() -> Condition.await/signalAll</code>，重点观察 Condition Queue 与 Sync Queue 的节点迁移</p>
-        <div class="tip">核心提醒：CyclicBarrier 本身不是 AQS 子类；它复用的是 ReentrantLock（AQS 独占）和 ConditionObject（AQS 条件队列）</div>
-    </section>
+    <header class="topbar">
+        <section class="hero" aria-labelledby="pageTitle">
+            <p class="eyebrow">CyclicBarrier + ReentrantLock + ConditionObject</p>
+            <h1 id="pageTitle">AQS 条件队列全细节流程图</h1>
+            <p>按源码单步调试视角展示 generation、count、Condition Queue、Sync Queue、signalAll、breakBarrier 和 reset 的同一时刻快照</p>
+        </section>
 
-    <section class="controls card" aria-label="流程控制">
-        <button id="prevBtn" class="btn" type="button">⏮ 上一步</button>
-        <button id="nextBtn" class="btn" type="button">⏭ 下一步</button>
-        <button id="resetBtn" class="btn" type="button">↺ 重置</button>
-        <div class="model-pill">演示模型：CyclicBarrier(3) + ReentrantLock + Condition trip</div>
-        <div class="control-note">快捷键：← 上一步，→ 下一步，Home 重置</div>
-    </section>
+        <section class="controls" aria-label="流程控制">
+            <button id="prevBtn" class="btn" type="button">上一步</button>
+            <button id="nextBtn" class="btn" type="button">下一步</button>
+            <button id="resetBtn" class="btn" type="button">重置</button>
+            <div class="counter-pill" id="stepCounter">-</div>
+            <div class="model-pill">Java 8 / CyclicBarrier(3) / ConditionObject</div>
+            <div class="control-note">快捷键：← / → / Home</div>
+        </section>
+    </header>
 
-    <section class="layout">
-        <article id="stage" class="stage card" aria-live="off">
+    <main class="workspace">
+        <nav class="timeline-panel" aria-labelledby="timelineTitle">
+            <div class="timeline-head">
+                <h2 id="timelineTitle">源码步骤</h2>
+                <span>可点击跳转</span>
+            </div>
+            <div id="timeline" class="timeline"></div>
+        </nav>
+
+        <article id="stage" class="stage" aria-live="off">
+            <section class="step-context" aria-label="当前步骤机制">
+                <div class="context-card context-action">
+                    <span>当前动作</span>
+                    <strong id="actionValue" class="context-value">-</strong>
+                </div>
+                <div class="context-card context-invariant">
+                    <span>机制不变量</span>
+                    <strong id="invariantValue" class="context-value">-</strong>
+                </div>
+            </section>
+
             <div class="status-grid">
-                <div class="status status-generation">
+                <div class="status status-state">
                     <span>generation / broken</span>
                     <strong id="generationValue">-</strong>
                 </div>
-                <div class="status status-count">
+                <div class="status status-state">
                     <span>count（剩余到达数）</span>
                     <strong id="countValue">-</strong>
                 </div>
-                <div class="status status-owner">
+                <div class="status">
                     <span>lock owner</span>
                     <strong id="ownerValue">-</strong>
                 </div>
-                <div class="status status-result">
+                <div class="status">
                     <span>本步结果</span>
                     <strong id="resultValue">-</strong>
                 </div>
             </div>
 
-            <section class="lane lane-threads">
-                <h3>线程状态（T1/T2/T3）</h3>
+            <section class="lane lane-threads" aria-labelledby="threadLaneTitle">
+                <h3 id="threadLaneTitle">线程泳道</h3>
                 <div id="threadLane" class="threads"></div>
             </section>
 
-            <section class="lane lane-queue">
-                <h3>Condition Queue（firstWaiter -> nextWaiter）</h3>
+            <section class="lane lane-queue" aria-labelledby="conditionLaneTitle">
+                <h3 id="conditionLaneTitle">Condition Queue：单链表</h3>
                 <div id="conditionWrap" class="queue-wrap"></div>
             </section>
 
-            <section class="lane lane-queue">
-                <h3>Sync Queue（AQS 双向链表）</h3>
+            <section class="lane lane-queue" aria-labelledby="syncLaneTitle">
+                <h3 id="syncLaneTitle">Sync Queue：双向链表</h3>
                 <div id="syncWrap" class="queue-wrap"></div>
             </section>
         </article>
 
-        <aside class="explain card">
+        <aside class="explain" aria-labelledby="stepTitle">
             <h2 id="stepTitle">-</h2>
             <p id="stepSummary" class="summary">-</p>
             <div id="focusBox" class="focus-box">-</div>
@@ -700,31 +936,9 @@
                 <ul id="nextList"></ul>
             </section>
 
-            <div class="note">教学抽象：节点 ID（C1/S1 等）是可视化标签，不代表 JDK 源码真实字段名；但状态迁移与调用顺序严格对应源码语义</div>
+            <div class="note">教学化逐指令视图：节点 ID 是可视化标签；CyclicBarrier 的状态变化仍按 Java 8 源码语义组织</div>
         </aside>
-    </section>
-
-    <section class="timeline-card card">
-        <div class="timeline-head">
-            <h3>完整时间线（可点击跳转）</h3>
-            <span id="stepCounter">-</span>
-        </div>
-        <div id="timeline" class="timeline"></div>
-    </section>
-
-    <section class="timeline-card card">
-        <div class="timeline-head">
-            <h3>读图提示</h3>
-        </div>
-        <section class="detail">
-            <ul>
-                <li>Condition Queue 节点 waitStatus 为 CONDITION(-2)，只在调用 <code>Condition.await()</code> 时出现</li>
-                <li><code>signalAll()</code> 不是直接 “放行”；它只是把条件节点转移到 Sync Queue，线程仍需重新竞争锁</li>
-                <li>CyclicBarrier 的正常放行来自 <code>nextGeneration()</code>；异常放行来自 <code>breakBarrier()</code></li>
-                <li>同一实例可循环使用：每次正常通过后都会创建新 generation 并重置 count</li>
-            </ul>
-        </section>
-    </section>
+    </main>
 </div>
 
 <script>
@@ -1104,7 +1318,7 @@
             generation: "g1 / broken=false",
             count: "1（尚未 breakBarrier）",
             owner: "T2",
-            result: "Condition.await -> InterruptedException",
+            result: "await 抛中断异常",
             threads: [
                 {name: "T1", state: "PARKED", desc: "仍在 C1 等待 signalAll"},
                 {name: "T2", state: "RUNNING", desc: "已重新获取锁，准备进入 dowait catch", active: true},
@@ -1145,7 +1359,7 @@
             summary: "T2 进入 dowait 的 catch (InterruptedException ie) 后命中 g==generation && !g.broken，执行 breakBarrier：置 broken=true，count 重置为 parties，trip.signalAll 把其它 Condition waiter 转到 Sync Queue",
             focus: "方法焦点：catch (InterruptedException ie) -> breakBarrier()",
             generation: "g1 / broken=true",
-            count: "3（breakBarrier 已重置）",
+            count: "3（已重置）",
             owner: "T2",
             result: "breakBarrier 完成",
             threads: [
@@ -1188,7 +1402,7 @@
             generation: "g1 / broken=true",
             count: "3",
             owner: "-",
-            result: "T2 throw InterruptedException",
+            result: "T2 抛中断异常",
             threads: [
                 {name: "T1", state: "READY", desc: "被 unpark，准备 acquireQueued(S1)", active: true},
                 {name: "T2", state: "EXCEPTION", desc: "已向调用方抛出 InterruptedException"},
@@ -1258,7 +1472,7 @@
             generation: "g1 / broken=true",
             count: "3",
             owner: "-",
-            result: "T1 throw BrokenBarrierException",
+            result: "T1 抛屏障破坏异常",
             threads: [
                 {name: "T1", state: "EXCEPTION", desc: "已向调用方抛出 BrokenBarrierException", active: true},
                 {name: "T2", state: "EXCEPTION", desc: "本轮抛 InterruptedException"},
@@ -1321,10 +1535,147 @@
         }
     ];
 
+    const stepMeta = [
+        {
+            group: "初始化",
+            groupKey: "init",
+            phase: "构造屏障",
+            action: "初始化 generation=g0、count=3 和 trip Condition",
+            invariant: "非 AQS 子类；依赖 Lock + Condition",
+            effect: "write"
+        },
+        {
+            group: "正常到达",
+            groupKey: "normal",
+            phase: "第一个到达",
+            action: "T1 lock 后执行 --count，得到 index=2",
+            invariant: "非最后到达者必须进入 Condition.await 等待翻代",
+            effect: "cas"
+        },
+        {
+            group: "Condition等待",
+            groupKey: "condition",
+            phase: "await 挂起",
+            action: "T1 加入 Condition Queue，fullyRelease 后 park",
+            invariant: "Condition 节点不在 Sync Queue，不能竞争锁",
+            effect: "park"
+        },
+        {
+            group: "Condition等待",
+            groupKey: "condition",
+            phase: "条件队列尾插",
+            action: "T2 加入 Condition Queue，形成 C1 -> C2",
+            invariant: "Condition Queue 是 nextWaiter 单向链",
+            effect: "enqueue"
+        },
+        {
+            group: "正常放行",
+            groupKey: "release",
+            phase: "最后到达",
+            action: "T3 --count 到 0，执行 barrierCommand",
+            invariant: "最后到达线程持锁执行命令并负责开闸",
+            effect: "write"
+        },
+        {
+            group: "正常放行",
+            groupKey: "release",
+            phase: "signalAll 转移",
+            action: "nextGeneration signalAll，把 C1/C2 转入 Sync Queue",
+            invariant: "signalAll 只是转移节点，等待线程仍要重新竞争锁",
+            effect: "enqueue"
+        },
+        {
+            group: "正常放行",
+            groupKey: "release",
+            phase: "释放锁唤醒",
+            action: "T3 unlock，唤醒 Sync Queue 首个后继 S1",
+            invariant: "AQS 独占队列按 head 后继顺序竞争锁",
+            effect: "unpark"
+        },
+        {
+            group: "正常放行",
+            groupKey: "release",
+            phase: "T1 返回",
+            action: "T1 重新获取锁，发现已翻代并返回 index=2",
+            invariant: "通过屏障由 g != generation 判定，不由 signalAll 直接返回",
+            effect: "sethead"
+        },
+        {
+            group: "正常放行",
+            groupKey: "release",
+            phase: "T2 返回",
+            action: "T2 重新获取锁并返回 index=1，第一轮结束",
+            invariant: "Condition Queue 清空后，Sync Queue 收敛为虚拟头",
+            effect: "complete"
+        },
+        {
+            group: "第二轮等待",
+            groupKey: "second",
+            phase: "循环复用",
+            action: "g1 中 T1/T2 再次 await，重建 C1 -> C2",
+            invariant: "CyclicBarrier 正常翻代后可复用同一个实例",
+            effect: "enqueue"
+        },
+        {
+            group: "中断破坏",
+            groupKey: "interrupt",
+            phase: "中断转移",
+            action: "T2 中断后先转入 Sync Queue，再重新获取锁",
+            invariant: "Condition.await 中断也必须先重新获取锁再抛异常",
+            effect: "exception"
+        },
+        {
+            group: "中断破坏",
+            groupKey: "interrupt",
+            phase: "breakBarrier",
+            action: "dowait 捕获中断，breakBarrier + signalAll",
+            invariant: "breakBarrier 标记本代失败，并唤醒其它等待线程收尾",
+            effect: "exception"
+        },
+        {
+            group: "中断破坏",
+            groupKey: "interrupt",
+            phase: "异常抛出",
+            action: "T2 finally unlock 后抛 InterruptedException",
+            invariant: "异常离开 await 前仍必须释放 ReentrantLock",
+            effect: "exception"
+        },
+        {
+            group: "中断破坏",
+            groupKey: "interrupt",
+            phase: "等待者重获锁",
+            action: "T1 从 Sync Queue 获取锁，回到 dowait 循环",
+            invariant: "signalAll 后等待者必须按 AQS 队列重新获取锁",
+            effect: "sethead"
+        },
+        {
+            group: "中断破坏",
+            groupKey: "interrupt",
+            phase: "broken 异常",
+            action: "T1 检查 broken，抛屏障破坏异常",
+            invariant: "同一 broken 代内的其它等待者都会异常通过",
+            effect: "exception"
+        },
+        {
+            group: "重置复用",
+            groupKey: "reset",
+            phase: "reset 收敛",
+            action: "reset 执行 breakBarrier + nextGeneration，进入干净 g2",
+            invariant: "reset 显式清理 broken 代，屏障恢复可复用",
+            effect: "complete"
+        }
+    ];
+
+    if (stepMeta.length !== steps.length) {
+        throw new Error("stepMeta 与 steps 数量不一致");
+    }
+
     const el = {
         prevBtn: document.getElementById("prevBtn"),
         nextBtn: document.getElementById("nextBtn"),
         resetBtn: document.getElementById("resetBtn"),
+        actionValue: document.getElementById("actionValue"),
+        invariantValue: document.getElementById("invariantValue"),
         generationValue: document.getElementById("generationValue"),
         countValue: document.getElementById("countValue"),
         ownerValue: document.getElementById("ownerValue"),
@@ -1347,7 +1698,10 @@
     };
 
     let current = 0;
-    let fixedPanelHeight = null;
+
+    function fullStep(index) {
+        return Object.assign({}, steps[index], stepMeta[index]);
+    }
 
     function stateClass(state) {
         const s = String(state || "").toUpperCase();
@@ -1362,6 +1716,19 @@
         if (ws > 0) return "pos";
         if (ws < 0) return "neg";
         return "zero";
+    }
+
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    }
+
+    function formatDeltaLine(line) {
+        const escaped = escapeHtml(line);
+        if (!line.includes("Queue:")) return escaped;
+        return escaped.replace(/\s-&gt;\s/g, ' <span class="queue-change-arrow">-&gt;</span> ');
     }
 
     function flashStage() {
@@ -1394,13 +1761,16 @@
         if (nodes.length === 0) {
             const empty = document.createElement("div");
             empty.className = "queue-empty";
-            empty.textContent = "Condition Queue 为空（没有线程在 trip.await 上等待）";
+            empty.innerHTML = `
+                <strong>Condition Queue 为空</strong>
+                <span>firstWaiter=null, lastWaiter=null</span>
+            `;
             el.conditionWrap.appendChild(empty);
             return;
         }
 
-        const forward = document.createElement("div");
-        forward.className = "queue-forward";
+        const chain = document.createElement("div");
+        chain.className = "queue-chain";
 
         nodes.forEach((node, index) => {
             const card = document.createElement("article");
@@ -1419,62 +1789,18 @@
                 <div class="node-line"><span class="label">waitStatus:</span> <span class="ws ${wsClass(node.ws)}">${wsText}</span></div>
                 <div class="node-line"><span class="label">nextWaiter:</span> ${node.nextWaiter}</div>
             `;
-            forward.appendChild(card);
+            chain.appendChild(card);
 
             if (index < nodes.length - 1) {
-                const arrow = document.createElement("span");
-                arrow.className = "arrow";
-                arrow.textContent = "→";
-                forward.appendChild(arrow);
+                const link = document.createElement("div");
+                link.className = "condition-link";
+                link.setAttribute("aria-hidden", "true");
+                link.textContent = "→";
+                chain.appendChild(link);
             }
         });
 
-        el.conditionWrap.appendChild(forward);
-
-        const pointer = document.createElement("div");
-        pointer.className = "pointer-panel";
-
-        const title = document.createElement("div");
-        title.className = "pointer-title";
-        title.textContent = "Condition 指针快照";
-        pointer.appendChild(title);
-
-        const first = document.createElement("div");
-        first.className = "pointer-line";
-        first.textContent = `firstWaiter=${nodes[0].id}`;
-        pointer.appendChild(first);
-
-        const last = document.createElement("div");
-        last.className = "pointer-line";
-        last.textContent = `lastWaiter=${nodes[nodes.length - 1].id}`;
-        pointer.appendChild(last);
-
-        nodes.forEach((node) => {
-            const line = document.createElement("div");
-            line.className = "pointer-line";
-            line.textContent = `${node.id}.nextWaiter=${node.nextWaiter}`;
-            pointer.appendChild(line);
-        });
-
-        el.conditionWrap.appendChild(pointer);
-    }
-
-    function buildBackwardChain(nodes) {
-        if (!nodes || nodes.length === 0) return "(空)";
-        return nodes.slice().reverse().map((n) => n.id).join(" -> ");
-    }
-
-    function escapeHtml(text) {
-        return String(text)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;");
-    }
-
-    function formatDeltaLine(line) {
-        const escaped = escapeHtml(line);
-        if (!line.includes("Queue:")) return escaped;
-        return escaped.replace(/\s-&gt;\s/g, ' <span class="queue-change-arrow">-&gt;</span> ');
+        el.conditionWrap.appendChild(chain);
     }
 
     function renderSyncQueue(step) {
@@ -1484,13 +1810,16 @@
         if (nodes.length === 0) {
             const empty = document.createElement("div");
             empty.className = "queue-empty";
-            empty.textContent = "Sync Queue 为空（当前无锁竞争排队）";
+            empty.innerHTML = `
+                <strong>Sync Queue 为空</strong>
+                <span>head=null, tail=null</span>
+            `;
             el.syncWrap.appendChild(empty);
             return;
         }
 
-        const forward = document.createElement("div");
-        forward.className = "queue-forward";
+        const chain = document.createElement("div");
+        chain.className = "queue-chain";
 
         nodes.forEach((node, index) => {
             const card = document.createElement("article");
@@ -1513,57 +1842,21 @@
                 <div class="node-line"><span class="label">prev:</span> ${node.prev}</div>
                 <div class="node-line"><span class="label">next:</span> ${node.next}</div>
             `;
-            forward.appendChild(card);
+            chain.appendChild(card);
 
             if (index < nodes.length - 1) {
-                const arrow = document.createElement("span");
-                arrow.className = "arrow";
-                arrow.textContent = "→";
-                forward.appendChild(arrow);
+                const link = document.createElement("div");
+                link.className = "link-pair";
+                link.setAttribute("aria-hidden", "true");
+                link.innerHTML = `
+                    <span class="link-arrow">→</span>
+                    <span class="link-arrow">←</span>
+                `;
+                chain.appendChild(link);
             }
         });
 
-        el.syncWrap.appendChild(forward);
-
-        const pointer = document.createElement("div");
-        pointer.className = "pointer-panel";
-
-        const title1 = document.createElement("div");
-        title1.className = "pointer-title";
-        title1.textContent = "Sync 指针快照";
-        pointer.appendChild(title1);
-
-        const headNode = nodes.find((n) => String(n.role || "").includes("HEAD")) || nodes[0];
-        const tailNode = nodes.find((n) => String(n.role || "").includes("TAIL")) || nodes[nodes.length - 1];
-
-        const line1 = document.createElement("div");
-        line1.className = "pointer-line";
-        line1.textContent = `head=${headNode.id}`;
-        pointer.appendChild(line1);
-
-        const line2 = document.createElement("div");
-        line2.className = "pointer-line";
-        line2.textContent = `tail=${tailNode.id}`;
-        pointer.appendChild(line2);
-
-        nodes.forEach((node) => {
-            const line = document.createElement("div");
-            line.className = "pointer-line";
-            line.textContent = `${node.id}.prev=${node.prev}, ${node.id}.next=${node.next}`;
-            pointer.appendChild(line);
-        });
-
-        const title2 = document.createElement("div");
-        title2.className = "pointer-title";
-        title2.textContent = "反向遍历（tail -> head）";
-        pointer.appendChild(title2);
-
-        const backward = document.createElement("div");
-        backward.className = "pointer-line";
-        backward.textContent = buildBackwardChain(nodes);
-        pointer.appendChild(backward);
-
-        el.syncWrap.appendChild(pointer);
+        el.syncWrap.appendChild(chain);
     }
 
     function renderList(target, lines, emptyText) {
@@ -1589,25 +1882,69 @@
 
     function renderTimeline() {
         el.timeline.innerHTML = "";
-        steps.forEach((step, index) => {
+        let activeChip = null;
+        let previousGroup = null;
+        const currentGroup = fullStep(current).group;
+        steps.forEach((rawStep, index) => {
+            const step = fullStep(index);
+            if (step.group !== previousGroup) {
+                const groupLabel = document.createElement("div");
+                const groupLastIndex = stepMeta.reduce((last, item, itemIndex) => {
+                    return item.group === step.group ? itemIndex : last;
+                }, -1);
+                const groupClasses = ["timeline-group"];
+                if (groupLastIndex < current) groupClasses.push("done");
+                if (step.group === currentGroup) groupClasses.push("active");
+                groupLabel.className = groupClasses.join(" ");
+                groupLabel.textContent = step.group;
+                groupLabel.setAttribute("role", "heading");
+                groupLabel.setAttribute("aria-level", "3");
+                el.timeline.appendChild(groupLabel);
+                previousGroup = step.group;
+            }
+
             const chip = document.createElement("button");
             chip.type = "button";
             const classes = ["step-chip"];
             if (index < current) classes.push("done");
             if (index === current) classes.push("active");
+            const label = rawStep.title.replace(/^\d+\)\s*/, "");
             chip.className = classes.join(" ");
-            chip.textContent = step.title.replace(/^\d+\)\s*/, "");
+            chip.setAttribute("aria-label", `跳转到第 ${index + 1} 步：${step.group} / ${step.phase}，${label}`);
+            if (index === current) {
+                chip.setAttribute("aria-current", "step");
+                activeChip = chip;
+            }
+            const labelWrap = document.createElement("span");
+            const title = document.createElement("span");
+            const phase = document.createElement("span");
+            labelWrap.className = "step-chip-copy";
+            title.className = "step-chip-title";
+            phase.className = "step-chip-phase";
+            title.textContent = label;
+            phase.textContent = step.phase;
+            labelWrap.appendChild(title);
+            labelWrap.appendChild(phase);
+            chip.appendChild(labelWrap);
             chip.addEventListener("click", () => {
                 current = index;
                 render(true);
             });
             el.timeline.appendChild(chip);
         });
+
+        if (activeChip) {
+            activeChip.scrollIntoView({block: "nearest", inline: "nearest"});
+        }
     }
 
     function render(animate) {
-        const step = steps[current];
+        const step = fullStep(current);
 
+        el.stage.dataset.effect = step.effect || "none";
+        el.stage.dataset.group = step.groupKey || "none";
+        el.actionValue.textContent = step.action;
+        el.invariantValue.textContent = step.invariant;
         el.generationValue.textContent = step.generation;
         el.countValue.textContent = step.count;
         el.ownerValue.textContent = step.owner;
@@ -1633,34 +1970,7 @@
         el.prevBtn.disabled = current === 0;
         el.nextBtn.disabled = current === steps.length - 1;
 
-        if (fixedPanelHeight !== null) {
-            const h = `${fixedPanelHeight}px`;
-            el.stage.style.height = h;
-            el.explain.style.height = h;
-        }
-
         if (animate) flashStage();
-    }
-
-    function computeFixedPanelHeight() {
-        const savedCurrent = current;
-
-        fixedPanelHeight = null;
-        el.stage.style.height = "auto";
-        el.explain.style.height = "auto";
-
-        let maxStage = 0;
-        let maxExplain = 0;
-
-        for (let i = 0; i < steps.length; i += 1) {
-            current = i;
-            render(false);
-            maxStage = Math.max(maxStage, el.stage.scrollHeight);
-            maxExplain = Math.max(maxExplain, el.explain.scrollHeight);
-        }
-
-        fixedPanelHeight = Math.max(maxStage, maxExplain);
-        current = savedCurrent;
     }
 
     function prev() {
@@ -1704,17 +2014,6 @@
         }
     });
 
-    let resizeTimer = null;
-    window.addEventListener("resize", () => {
-        window.clearTimeout(resizeTimer);
-        resizeTimer = window.setTimeout(() => {
-            computeFixedPanelHeight();
-            render(false);
-        }, 120);
-    });
-
-    render(false);
-    computeFixedPanelHeight();
     render(false);
 })();
 </script>
