@@ -35,6 +35,29 @@ public class FutureTask<V> implements RunnableFuture<V>
 
     private static final int NEW = 0; // 新建
 
+    /*
+     * COMPLETING 的价值在于把两件事拆开
+     * 1. 抢完成权: NEW -> COMPLETING
+     * 2. 发布结果: outcome = result/exception -> state = NORMAL/EXCEPTIONAL
+     *
+     * 如果直接 NORMAL/EXCEPTIONAL
+     * ------
+     * 错误 1: 先改最终态
+     * CAS state: NEW -> NORMAL;
+     * outcome = result;
+     * 这会让 get() 线程看到 state == NORMAL 后立刻读 outcome, 但此时 outcome 可能还没写完, 读到 null 或旧值
+     * ------
+     * // 错误 2: 先写 outcome
+     * outcome = result;
+     * CAS state: NEW -> NORMAL;
+     * 如果 cancel() 成功, outcome = result 且 state = CANCELLED 在语义上是脏的, FutureTask 已取消, 但内部却残留了一个 "本不该发布" 的执行结果
+     * ------
+     * 所以 FutureTask 用三段式
+     * CAS state: NEW -> COMPLETING;  // 先抢完成权, 只有一个线程成功
+     * outcome = result;              // 成功者写结果
+     * putOrderedInt(state, NORMAL);  // 再发布最终态
+     * get() 线程看到 COMPLETING 时只等待, 不读结果, 只有看到 NORMAL/EXCEPTIONAL 才读 outcome
+     */
     private static final int COMPLETING  = 1; // 完成中
     private static final int NORMAL      = 2; // 1、正常完成
     private static final int EXCEPTIONAL = 3; // 2、运行异常
@@ -445,6 +468,19 @@ public class FutureTask<V> implements RunnableFuture<V>
          * 因为 cancel(true) 中是 "单线程 + 有序性 + 写"
          * UNSAFE.putOrderedInt(this, stateOffset, INTERRUPTED);
          * 所以这里要 "多线程 + 可见性 + 循环读"
+         *
+         * cancel(true) 为什么要先进入 INTERRUPTING, 再发布 INTERRUPTED
+         * 如果取消线程把 state 直接改成 INTERRUPTED, 但还没来得及 interrupt(runner)
+         * 当执行线程已经跑完 callable 离开 run(), 它可能回到线程池去执行下一个任务
+         * 然后取消线程晚一步调用 interrupt(), 这个中断就可能晚于 run 返回后才投递给 runner
+         *
+         * 新增 INTERRUPTING
+         * 取消线程先 NEW -> INTERRUPTING, 然后 interrupt(runner), 然后改状态为 INTERRUPTED
+         * 执行线程: 如果正在执行, 就会被中断
+         * 执行线程: 如果执行完成, 就会进入这里, 等待 INTERRUPTED
+         *
+         * INTERRUPTED 的意义是标记 cancel(true) 的 interrupt(runner) 动作已经完成
+         * 使执行线程在退出 run() 前等过 INTERRUPTING 窗口, 避免取消线程延迟到 run 返回后才投递 interrupt
          */
 
         // It is possible for our interrupter to stall before getting a

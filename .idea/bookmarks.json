@@ -1,6 +1,54 @@
 {
   "jdk-stu": [
     {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 528,
+      "name": "finishCompletion()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 351,
+      "name": "run()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 345,
+      "name": "钩子函数 done()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 311,
+      "name": "get()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 281,
+      "name": "report(int s)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 237,
+      "name": "cancel(boolean mayInterruptIfRunning)",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 207,
+      "name": "setException()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
+      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
+      "linenumber": 185,
+      "name": "set()",
+      "bookmarkType": "DEFAULT"
+    },
+    {
       "fileDescriptor": "$/src/main/java/aqs/synchronization_tool/CyclicBarrier.java",
       "linenumber": 89,
       "name": "循环屏障 await",
@@ -442,54 +490,6 @@
       "fileDescriptor": "$/src/main/java/aqs/thread_pool/ThreadPoolExecutor.java",
       "linenumber": 294,
       "name": "submit() 与拒绝策略",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
-      "linenumber": 258,
-      "name": "report(int s)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
-      "linenumber": 288,
-      "name": "get()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
-      "linenumber": 322,
-      "name": "钩子函数 done()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
-      "linenumber": 492,
-      "name": "finishCompletion()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
-      "linenumber": 214,
-      "name": "cancel(boolean mayInterruptIfRunning)",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
-      "linenumber": 184,
-      "name": "setException()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
-      "linenumber": 162,
-      "name": "set()",
-      "bookmarkType": "DEFAULT"
-    },
-    {
-      "fileDescriptor": "$/src/main/java/aqs/future/FutureTask.java",
-      "linenumber": 328,
-      "name": "run()",
       "bookmarkType": "DEFAULT"
     },
     {

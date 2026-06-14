@@ -1,0 +1,2957 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>LongAdder 分片累加全细节流程图</title>
+    <style>
+        :root {
+            --bg: #f6f7f9;
+            --surface: #ffffff;
+            --surface-soft: #f8fafc;
+            --line: #d8e0ec;
+            --line-strong: #b9c6d8;
+            --text: #111827;
+            --muted: #5f6b7a;
+            --blue: #2563eb;
+            --blue-soft: #eef5ff;
+            --green: #15803d;
+            --green-soft: #ecfdf3;
+            --orange: #c2410c;
+            --orange-soft: #fff4e6;
+            --red: #dc2626;
+            --red-soft: #fff1f2;
+            --violet: #6d28d9;
+            --violet-soft: #f5f3ff;
+            --teal: #0f766e;
+            --teal-soft: #ecfdfb;
+            --shadow: 0 8px 22px rgba(17, 24, 39, 0.07);
+            --radius: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        button {
+            font: inherit;
+        }
+
+        .app {
+            width: min(1540px, calc(100vw - 24px));
+            min-width: 1420px;
+            height: 100vh;
+            margin: 0 auto;
+            padding: 12px 0 18px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 10px;
+            overflow: hidden;
+        }
+
+        .app > *,
+        .topbar > *,
+        .workspace > *,
+        .stage > * {
+            min-width: 0;
+        }
+
+        .topbar,
+        .timeline-panel,
+        .stage,
+        .explain {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .topbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+        }
+
+        .hero {
+            display: grid;
+            gap: 4px;
+        }
+
+        .eyebrow {
+            margin: 0;
+            color: var(--blue);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-size: 24px;
+            line-height: 1.25;
+        }
+
+        .hero p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn {
+            min-height: 34px;
+            border: 1px solid var(--line-strong);
+            background: #ffffff;
+            color: #243044;
+            border-radius: var(--radius);
+            padding: 6px 10px;
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+        }
+
+        .btn:hover {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .btn:focus-visible,
+        .step-chip:focus-visible {
+            outline: 2px solid var(--blue);
+            outline-offset: 2px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .model-pill,
+        .control-note,
+        .counter-pill {
+            border-radius: var(--radius);
+            padding: 6px 9px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .model-pill {
+            border: 1px solid #bdd3f5;
+            background: var(--blue-soft);
+            color: #1e3a8a;
+        }
+
+        .control-note {
+            color: #64748b;
+            background: var(--surface-soft);
+            border: 1px solid #e2e8f0;
+        }
+
+        .counter-pill {
+            color: #36506f;
+            background: #f0f6ff;
+            border: 1px solid #c8daf5;
+            white-space: nowrap;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 240px minmax(760px, 1fr) 370px;
+            grid-template-areas: "timeline stage explain";
+            gap: 10px;
+            align-items: stretch;
+            min-height: 0;
+        }
+
+        .timeline-panel,
+        .stage,
+        .explain {
+            height: auto;
+            min-height: 0;
+            max-height: none;
+        }
+
+        .timeline-panel {
+            grid-area: timeline;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            overflow: hidden;
+        }
+
+        .timeline-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            padding: 10px 10px 8px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .timeline-head h2 {
+            margin: 0;
+            color: #243044;
+            font-size: 14px;
+        }
+
+        .timeline-head span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .timeline {
+            counter-reset: step;
+            display: grid;
+            align-content: start;
+            gap: 7px;
+            padding: 10px;
+            overflow: auto;
+        }
+
+        .timeline-group {
+            margin: 7px 0 1px;
+            border: 1px solid #dce4ef;
+            border-radius: var(--radius);
+            background: #f8fafc;
+            color: #475569;
+            padding: 5px 8px;
+            font-size: 11px;
+            font-weight: 900;
+        }
+
+        .timeline-group.done {
+            border-color: #b7e4c4;
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .timeline-group.active {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .step-chip {
+            counter-increment: step;
+            width: 100%;
+            height: max-content;
+            min-height: 58px;
+            border: 1px solid #d1dae8;
+            background: #ffffff;
+            color: #334155;
+            border-radius: var(--radius);
+            padding: 7px 8px;
+            display: grid;
+            grid-template-columns: 30px minmax(0, 1fr);
+            gap: 8px;
+            align-items: start;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .step-chip::before {
+            content: counter(step);
+            width: 28px;
+            height: 28px;
+            margin-top: 1px;
+            display: grid;
+            place-items: center;
+            border-radius: 999px;
+            background: #e9eef6;
+            color: #475569;
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .step-chip:hover {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .step-chip.done {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .step-chip.done::before {
+            background: #d9f7e3;
+            color: var(--green);
+        }
+
+        .step-chip.active {
+            border-color: #1d4ed8;
+            background: #1d4ed8;
+            color: #ffffff;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+        }
+
+        .step-chip.active::before {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+        }
+
+        .step-chip-copy {
+            display: grid;
+            gap: 3px;
+            align-self: start;
+            min-width: 0;
+            line-height: 1.34;
+        }
+
+        .step-chip-title {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            line-height: 1.32;
+        }
+
+        .step-chip-phase {
+            min-width: 0;
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 800;
+            line-height: 1.3;
+            white-space: normal;
+            overflow: visible;
+        }
+
+        .step-chip.done .step-chip-phase {
+            color: #15803d;
+        }
+
+        .step-chip.active .step-chip-phase {
+            color: rgba(255, 255, 255, 0.76);
+        }
+
+        .stage {
+            grid-area: stage;
+            padding: 10px;
+            display: grid;
+            grid-template-rows: 62px 131px 132px 112px minmax(0, 1fr);
+            gap: 8px;
+            overflow: hidden;
+            transition: box-shadow 0.16s ease, border-color 0.16s ease;
+        }
+
+        .stage.flash {
+            border-color: #93b5e8;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13), var(--shadow);
+        }
+
+        .step-context {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .context-card {
+            height: 62px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 7px 8px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            align-content: start;
+            overflow: hidden;
+            transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .context-card span {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .context-card strong {
+            display: block;
+            margin-top: 4px;
+            color: #111827;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        .context-value {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stage[data-effect="base"] .context-action,
+        .stage[data-effect="read"] .context-action {
+            border-color: #93c5fd;
+            background: var(--blue-soft);
+        }
+
+        .stage[data-effect="cell"] .context-action,
+        .stage[data-effect="spread"] .context-action {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+        }
+
+        .stage[data-effect="init"] .context-action,
+        .stage[data-effect="reset"] .context-action {
+            border-color: #99f6e4;
+            background: var(--teal-soft);
+        }
+
+        .stage[data-effect="probe"] .context-action,
+        .stage[data-effect="collide"] .context-action {
+            border-color: #fed7aa;
+            background: var(--orange-soft);
+        }
+
+        .stage[data-effect="expand"] .context-action,
+        .stage[data-effect="boundary"] .context-action {
+            border-color: #c4b5fd;
+            background: var(--violet-soft);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-rows: repeat(2, 62px);
+            gap: 7px;
+        }
+
+        .status {
+            height: 62px;
+            min-height: 0;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface-soft);
+            padding: 7px 8px;
+            overflow: hidden;
+            transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .status.active {
+            border-color: #60a5fa;
+            background: #f0f6ff;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.16);
+        }
+
+        .stage[data-effect="cell"] .status.active,
+        .stage[data-effect="spread"] .status.active {
+            border-color: #86d6a0;
+            background: var(--green-soft);
+            box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.12);
+        }
+
+        .stage[data-effect="init"] .status.active,
+        .stage[data-effect="reset"] .status.active {
+            border-color: #99f6e4;
+            background: var(--teal-soft);
+            box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.10);
+        }
+
+        .stage[data-effect="probe"] .status.active,
+        .stage[data-effect="collide"] .status.active {
+            border-color: #fdba74;
+            background: var(--orange-soft);
+            box-shadow: 0 0 0 2px rgba(194, 65, 12, 0.10);
+        }
+
+        .stage[data-effect="expand"] .status.active,
+        .stage[data-effect="boundary"] .status.active {
+            border-color: #b9a7ff;
+            background: var(--violet-soft);
+            box-shadow: 0 0 0 2px rgba(109, 40, 217, 0.11);
+        }
+
+        .status span {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .status strong {
+            display: -webkit-box;
+            margin-top: 4px;
+            color: #111827;
+            font-size: 12px;
+            line-height: 1.25;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            overflow-wrap: anywhere;
+        }
+
+        .status-base strong,
+        .status-cells strong,
+        .status-busy strong,
+        .status-probe strong,
+        .status-sum strong {
+            font-family: Menlo, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .status-result strong,
+        .status-sum strong {
+            font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+
+        .flow,
+        .lane,
+        .stripe-board {
+            min-height: 0;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #fcfdff;
+            padding: 8px;
+            display: grid;
+            gap: 7px;
+            overflow: hidden;
+        }
+
+        .flow {
+            grid-template-rows: auto minmax(0, 1fr);
+            padding-bottom: 12px;
+        }
+
+        .flow h3,
+        .lane h3,
+        .stripe-board h3 {
+            margin: 0;
+            color: #334155;
+            font-size: 13px;
+        }
+
+        .flow-grid {
+            min-height: 0;
+            display: grid;
+            gap: 5px;
+            align-content: start;
+        }
+
+        .flow-row {
+            display: grid;
+            grid-template-columns: 52px minmax(0, 1fr);
+            gap: 7px;
+            align-items: center;
+            min-width: 0;
+        }
+
+        .flow-label {
+            border-radius: 999px;
+            background: #e5e9f0;
+            color: #475569;
+            padding: 3px 7px;
+            font-size: 10px;
+            font-weight: 900;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .flow-row.active .flow-label {
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .flow-track {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .flow-node {
+            flex: 1 1 0;
+            min-width: 0;
+            border: 1px solid #d8e0ec;
+            border-radius: var(--radius);
+            background: #ffffff;
+            color: #334155;
+            padding: 3px 6px;
+            font-size: 11px;
+            font-weight: 800;
+            text-align: center;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .flow-node.active {
+            border-color: #60a5fa;
+            background: #ffffff;
+            color: #334155;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .stage[data-effect="cell"] .flow-node.active,
+        .stage[data-effect="spread"] .flow-node.active {
+            border-color: #86d6a0;
+            box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.14);
+        }
+
+        .stage[data-effect="init"] .flow-node.active,
+        .stage[data-effect="reset"] .flow-node.active,
+        .stage[data-effect="read"] .flow-node.active {
+            border-color: #99f6e4;
+            box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
+        }
+
+        .stage[data-effect="probe"] .flow-node.active,
+        .stage[data-effect="collide"] .flow-node.active {
+            border-color: #fdba74;
+            box-shadow: 0 0 0 2px rgba(194, 65, 12, 0.12);
+        }
+
+        .stage[data-effect="expand"] .flow-node.active,
+        .stage[data-effect="boundary"] .flow-node.active {
+            border-color: #b9a7ff;
+            box-shadow: 0 0 0 2px rgba(109, 40, 217, 0.12);
+        }
+
+        .flow-arrow {
+            flex: 0 0 10px;
+            color: #94a3b8;
+            font-size: 12px;
+            font-weight: 900;
+            text-align: center;
+        }
+
+        .lane {
+            grid-template-rows: auto minmax(0, 1fr);
+            padding-bottom: 12px;
+        }
+
+        .threads {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-auto-rows: 68px;
+            gap: 7px;
+        }
+
+        .thread {
+            height: 68px;
+            border: 1px solid #d8e0ec;
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 7px;
+            overflow: hidden;
+        }
+
+        .thread.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .thread-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .thread-name {
+            font-size: 12px;
+            font-weight: 800;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .badge {
+            border-radius: 999px;
+            padding: 2px 7px;
+            font-size: 10px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .b-running {
+            background: #dcfce7;
+            color: #065f46;
+        }
+
+        .b-ready {
+            background: #dbeafe;
+            color: #1e3a8a;
+        }
+
+        .b-parked {
+            background: var(--orange-soft);
+            color: #9a3412;
+        }
+
+        .b-idle {
+            background: #e5e9f0;
+            color: #475569;
+        }
+
+        .b-ex {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .thread p {
+            margin: 4px 0 0;
+            color: #475569;
+            font-size: 10.5px;
+            line-height: 1.25;
+            overflow-wrap: anywhere;
+        }
+
+        .stripe-board {
+            grid-template-rows: auto auto minmax(0, 1fr) auto;
+        }
+
+        .stage[data-effect="base"] .stripe-board,
+        .stage[data-effect="read"] .stripe-board {
+            border-color: #c8daf5;
+        }
+
+        .stage[data-effect="cell"] .stripe-board,
+        .stage[data-effect="spread"] .stripe-board {
+            border-color: #b7e4c4;
+        }
+
+        .stage[data-effect="init"] .stripe-board,
+        .stage[data-effect="reset"] .stripe-board {
+            border-color: #99f6e4;
+        }
+
+        .stage[data-effect="probe"] .stripe-board,
+        .stage[data-effect="collide"] .stripe-board {
+            border-color: #fed7aa;
+        }
+
+        .stage[data-effect="expand"] .stripe-board,
+        .stage[data-effect="boundary"] .stripe-board {
+            border-color: #c4b5fd;
+        }
+
+        .stripe-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .stripe-head p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .base-strip {
+            min-height: 58px;
+            border: 1px solid #c8daf5;
+            border-radius: var(--radius);
+            background: #f0f6ff;
+            padding: 7px 8px;
+            display: grid;
+            grid-template-columns: 76px minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .base-label,
+        .base-value {
+            font-weight: 900;
+        }
+
+        .base-label {
+            color: #1e3a8a;
+            font-size: 12px;
+        }
+
+        .base-value {
+            color: #111827;
+            font-family: Menlo, Consolas, monospace;
+            font-size: 18px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .base-note {
+            min-width: 0;
+            color: #36506f;
+            font-size: 12px;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+
+        .base-strip.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.16);
+        }
+
+        .stage[data-effect="init"] .base-strip.active,
+        .stage[data-effect="reset"] .base-strip.active,
+        .stage[data-effect="read"] .base-strip.active {
+            border-color: #14b8a6;
+            background: var(--teal-soft);
+            box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
+        }
+
+        .stage[data-effect="cell"] .base-strip.active,
+        .stage[data-effect="spread"] .base-strip.active {
+            border-color: #86d6a0;
+            background: var(--green-soft);
+            box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.12);
+        }
+
+        .stage[data-effect="probe"] .base-strip.active,
+        .stage[data-effect="collide"] .base-strip.active {
+            border-color: #fdba74;
+            background: var(--orange-soft);
+            box-shadow: 0 0 0 2px rgba(194, 65, 12, 0.11);
+        }
+
+        .cells-wrap {
+            min-height: 0;
+            overflow: auto;
+            padding-right: 2px;
+        }
+
+        .cells-grid {
+            min-height: 100%;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-auto-rows: minmax(118px, 1fr);
+            gap: 8px;
+            align-content: start;
+        }
+
+        .cells-grid.cells-0,
+        .cells-grid.cells-1 {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .cells-grid.cells-2 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .cells-grid.cells-3 {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .cell-card {
+            min-height: 118px;
+            position: relative;
+            border: 1px solid #d2dceb;
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 7px;
+            overflow: hidden;
+            transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+        }
+
+        .cell-card.empty {
+            border-style: dashed;
+            background: #f8fafc;
+            color: #64748b;
+        }
+
+        .cells-grid.cells-0 .cell-card.empty {
+            display: grid;
+            align-content: center;
+            justify-items: center;
+            text-align: center;
+        }
+
+        .cells-grid.cells-0 .cell-card.empty .cell-index {
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+
+        .cells-grid.cells-0 .cell-card.empty .cell-line {
+            max-width: 520px;
+        }
+
+        .cell-card.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .cell-card.created {
+            border-color: #86d6a0;
+            background: var(--green-soft);
+        }
+
+        .cell-card.collision {
+            border-color: #fdba74;
+            background: var(--orange-soft);
+        }
+
+        .cell-card.expand {
+            border-color: #b9a7ff;
+            background: var(--violet-soft);
+        }
+
+        .cell-card.read {
+            border-color: #99f6e4;
+            background: var(--teal-soft);
+        }
+
+        .cell-card.active::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: var(--radius);
+            border: 2px solid rgba(37, 99, 235, 0.22);
+            pointer-events: none;
+            animation: pulse 1.1s ease-in-out infinite;
+        }
+
+        .cell-card.created.active::after {
+            border-color: rgba(21, 128, 61, 0.24);
+        }
+
+        .cell-card.collision.active::after {
+            border-color: rgba(194, 65, 12, 0.26);
+        }
+
+        .cell-card.expand.active::after {
+            border-color: rgba(109, 40, 217, 0.24);
+        }
+
+        .cell-card.read.active::after {
+            border-color: rgba(15, 118, 110, 0.24);
+        }
+
+        .cell-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 5px;
+        }
+
+        .cell-index {
+            color: #111827;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .cell-state {
+            border-radius: 999px;
+            background: #e5e9f0;
+            color: #334155;
+            padding: 1px 6px;
+            font-size: 10px;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+
+        .cell-line {
+            margin: 2px 0;
+            color: #334155;
+            font-size: 11px;
+            line-height: 1.32;
+            overflow-wrap: anywhere;
+        }
+
+        .cell-line .label {
+            color: #64748b;
+        }
+
+        .cell-value {
+            color: #111827;
+            font-family: Menlo, Consolas, monospace;
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+        .probe-strip {
+            min-height: 46px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .probe-token {
+            border: 1px solid #d8e0ec;
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 5px 7px;
+            overflow: hidden;
+        }
+
+        .probe-token.active {
+            border-color: #fdba74;
+            background: var(--orange-soft);
+        }
+
+        .probe-token strong {
+            display: block;
+            color: #334155;
+            font-size: 11px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .probe-token span {
+            display: block;
+            color: #64748b;
+            font-family: Menlo, Consolas, monospace;
+            font-size: 10px;
+            font-weight: 800;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .explain {
+            grid-area: explain;
+            padding: 10px;
+            display: grid;
+            align-content: start;
+            gap: 8px;
+            overflow: auto;
+        }
+
+        .explain h2 {
+            margin: 0;
+            font-size: 18px;
+            line-height: 1.32;
+        }
+
+        .explain .summary {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .focus-box {
+            border: 1px solid #bdd3f5;
+            border-radius: var(--radius);
+            background: var(--blue-soft);
+            color: #1e3a8a;
+            padding: 7px 8px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .detail {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 8px;
+        }
+
+        .detail h3 {
+            margin: 0 0 6px;
+            color: #334155;
+            font-size: 12px;
+        }
+
+        .detail ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 5px;
+        }
+
+        .detail li {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: var(--surface-soft);
+            padding: 5px 7px;
+            color: #334155;
+            font-size: 12px;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+
+        .detail li.empty {
+            color: var(--muted);
+            border-style: dashed;
+        }
+
+        .note {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.30;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.75;
+                transform: scale(0.985);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <header class="topbar">
+        <section class="hero" aria-labelledby="pageTitle">
+            <p class="eyebrow">LongAdder + Striped64 + Cell[] 动态分片</p>
+            <h1 id="pageTitle">LongAdder 分片累加全细节流程图</h1>
+            <p>按 Java 8 源码单步展示 base 快路径、cellsBusy 初始化/扩容、probe 迁移、Cell CAS 和 sum 非原子快照边界</p>
+        </section>
+
+        <section class="controls" aria-label="流程控制">
+            <button id="prevBtn" class="btn" type="button">上一步</button>
+            <button id="nextBtn" class="btn" type="button">下一步</button>
+            <button id="resetBtn" class="btn" type="button">重置</button>
+            <div class="counter-pill" id="stepCounter">-</div>
+            <div class="model-pill">Java 8 / LongAdder / Striped64</div>
+            <div class="control-note">快捷键：← / → / Home</div>
+        </section>
+    </header>
+
+    <main class="workspace">
+        <nav class="timeline-panel" aria-labelledby="timelineTitle">
+            <div class="timeline-head">
+                <h2 id="timelineTitle">源码步骤</h2>
+                <span>可点击跳转</span>
+            </div>
+            <div id="timeline" class="timeline"></div>
+        </nav>
+
+        <article id="stage" class="stage" aria-live="off">
+            <section class="step-context" aria-label="当前步骤机制">
+                <div class="context-card context-action">
+                    <span>当前动作</span>
+                    <strong id="actionValue" class="context-value">-</strong>
+                </div>
+                <div class="context-card context-invariant">
+                    <span>机制不变量</span>
+                    <strong id="invariantValue" class="context-value">-</strong>
+                </div>
+            </section>
+
+            <section class="status-grid" aria-label="LongAdder 字段快照">
+                <div class="status status-base" data-field="base">
+                    <span>base</span>
+                    <strong id="baseValue">-</strong>
+                </div>
+                <div class="status status-cells" data-field="cells">
+                    <span>cells</span>
+                    <strong id="cellsValue">-</strong>
+                </div>
+                <div class="status status-busy" data-field="busy">
+                    <span>cellsBusy</span>
+                    <strong id="busyValue">-</strong>
+                </div>
+                <div class="status status-probe" data-field="probe">
+                    <span>probe / slot</span>
+                    <strong id="probeValue">-</strong>
+                </div>
+                <div class="status status-sum" data-field="sum">
+                    <span>sum 视图</span>
+                    <strong id="sumValue">-</strong>
+                </div>
+                <div class="status status-result" data-field="result">
+                    <span>本步结果</span>
+                    <strong id="resultValue">-</strong>
+                </div>
+            </section>
+
+            <section class="flow" aria-labelledby="flowTitle">
+                <h3 id="flowTitle">源码路径总览</h3>
+                <div class="flow-grid">
+                    <div id="flowAdd" class="flow-row"></div>
+                    <div id="flowStripe" class="flow-row"></div>
+                    <div id="flowRead" class="flow-row"></div>
+                </div>
+            </section>
+
+            <section class="lane lane-threads" aria-labelledby="threadLaneTitle">
+                <h3 id="threadLaneTitle">线程泳道</h3>
+                <div id="threadLane" class="threads"></div>
+            </section>
+
+            <section class="stripe-board" aria-labelledby="stripeTitle">
+                <div class="stripe-head">
+                    <h3 id="stripeTitle">分片热区：base + Cell[] + probe 映射</h3>
+                    <p id="stripeCaption">-</p>
+                </div>
+                <div id="baseStrip" class="base-strip">
+                    <div class="base-label">base</div>
+                    <div id="baseNote" class="base-note">-</div>
+                    <div id="baseLarge" class="base-value">0</div>
+                </div>
+                <div id="cellsWrap" class="cells-wrap"></div>
+                <div id="probeStrip" class="probe-strip"></div>
+            </section>
+        </article>
+
+        <aside class="explain" aria-labelledby="stepTitle">
+            <h2 id="stepTitle">-</h2>
+            <p id="stepSummary" class="summary">-</p>
+            <div id="focusBox" class="focus-box">-</div>
+
+            <section class="detail">
+                <h3>调用链（当前步骤）</h3>
+                <ul id="chainList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>方法内细节点（逐条）</h3>
+                <ul id="microList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>CAS / 原子操作</h3>
+                <ul id="casList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>关键字段变化</h3>
+                <ul id="deltaList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>为何进入下一步</h3>
+                <ul id="nextList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>源码锚点</h3>
+                <ul id="sourceList"></ul>
+            </section>
+
+            <div class="note">教学化逐指令视图，专注 Java 8 LongAdder/Striped64 的分片累加、冲突消散和读快照语义边界</div>
+        </aside>
+    </main>
+</div>
+
+<script>
+(() => {
+    const flowRows = {
+        add: [
+            {id: "add", label: "add(x)"},
+            {id: "read_cells", label: "读 cells"},
+            {id: "cas_base", label: "casBase"},
+            {id: "slot", label: "slot"},
+            {id: "cell_cas", label: "Cell CAS"},
+            {id: "done", label: "完成"}
+        ],
+        stripe: [
+            {id: "acc", label: "longAccumulate"},
+            {id: "probe", label: "probe"},
+            {id: "busy", label: "cellsBusy"},
+            {id: "create", label: "new Cell"},
+            {id: "expand", label: "扩容"},
+            {id: "rehash", label: "rehash"}
+        ],
+        read: [
+            {id: "sum", label: "sum()"},
+            {id: "read_base", label: "读 base"},
+            {id: "scan", label: "扫 cells"},
+            {id: "reset", label: "reset"},
+            {id: "return", label: "返回值"},
+            {id: "boundary", label: "边界"}
+        ]
+    };
+
+    const stepMeta = [
+        {group: "初始化与 base 快路", groupKey: "base", phase: "构造", action: "new LongAdder() 只建立零值字段", invariant: "无竞争时所有更新先走 base", effect: "base"},
+        {group: "初始化与 base 快路", groupKey: "base", phase: "无竞争 add", action: "cells 为 null，casBase 直接成功", invariant: "快路径不创建 Cell[]", effect: "base"},
+        {group: "初始化与 base 快路", groupKey: "base", phase: "base 竞争", action: "两个线程竞争 base，其中一个 CAS 失败", invariant: "base CAS 失败才暴露竞争", effect: "collide"},
+        {group: "初始化与 base 快路", groupKey: "base", phase: "probe 初始化", action: "getProbe 为 0 时强制初始化 ThreadLocalRandom", invariant: "probe 是线程到 slot 的哈希输入", effect: "probe"},
+        {group: "Cell[] 懒初始化", groupKey: "init", phase: "抢 cellsBusy", action: "CAS cellsBusy: 0 -> 1", invariant: "cellsBusy 是短自旋门闩，不是阻塞锁", effect: "init"},
+        {group: "Cell[] 懒初始化", groupKey: "init", phase: "初始化竞争", action: "其它线程拿不到 cellsBusy 时回退 casBase", invariant: "初始化期间仍允许 base 承接一次更新", effect: "base"},
+        {group: "Cell[] 懒初始化", groupKey: "init", phase: "发布 Cell[2]", action: "创建长度 2 的 cells，并释放 cellsBusy", invariant: "第一次分片只填入当前 probe 对应 slot", effect: "init"},
+        {group: "分片更新", groupKey: "cell", phase: "Cell CAS", action: "cells 非 null 后直接按 probe 命中 Cell", invariant: "base 不再是唯一热点", effect: "cell"},
+        {group: "分片更新", groupKey: "cell", phase: "补空槽", action: "slot 为空时用 cellsBusy 补 new Cell", invariant: "空 slot 只在门闩内写入", effect: "cell"},
+        {group: "分片更新", groupKey: "cell", phase: "入口 CAS 失败", action: "add 入口的 Cell CAS 失败后进入 longAccumulate(false)", invariant: "失败线程的本次增量尚未落账", effect: "collide"},
+        {group: "分片更新", groupKey: "cell", phase: "消化已知失败", action: "wasUncontended=false 只改回 true 并推进 probe", invariant: "已知失败不立刻扩容", effect: "probe"},
+        {group: "分片更新", groupKey: "cell", phase: "第一次碰撞", action: "迁移后 Cell CAS 再失败，collide=false -> true", invariant: "一次真实碰撞只记录扩容候选", effect: "collide"},
+        {group: "扩容与冲突消散", groupKey: "expand", phase: "第二次碰撞", action: "连续碰撞后抢 cellsBusy 扩容", invariant: "扩容只复制引用，不重算旧 Cell 值", effect: "expand"},
+        {group: "扩容与冲突消散", groupKey: "expand", phase: "扩容后落空槽", action: "新 mask 让 probe 命中空 slot 并创建 Cell", invariant: "扩容服务于减少冲突，不改变总和语义", effect: "spread"},
+        {group: "扩容与冲突消散", groupKey: "expand", phase: "容量边界", action: "达到 NCPU 或表已过期时不继续扩容", invariant: "超过 CPU 后靠 probe 随机迁移找低冲突映射", effect: "boundary"},
+        {group: "扩容与冲突消散", groupKey: "expand", phase: "稳定分散", action: "多个线程分散到不同 Cell CAS 成功", invariant: "吞吐提升来自热点拆分，不来自合并锁", effect: "spread"},
+        {group: "读取与非原子快照", groupKey: "read", phase: "sum 读 base", action: "sum() 先把 base 读入局部变量", invariant: "读取路径不阻塞更新线程", effect: "read"},
+        {group: "读取与非原子快照", groupKey: "read", phase: "扫描 cells", action: "逐个读取非 null Cell.value 并累加", invariant: "sum 不是线性化点，也不是原子快照", effect: "read"},
+        {group: "读取与非原子快照", groupKey: "read", phase: "并发更新窗口", action: "扫描期间 Cell 仍可被其它线程 CAS 更新", invariant: "返回值可能不包含扫描期间发生的更新", effect: "collide"},
+        {group: "读取与非原子快照", groupKey: "read", phase: "返回边界", action: "sum 返回当时遍历到的 base + cells", invariant: "无并发更新时准确；有并发更新时只适合统计", effect: "read"},
+        {group: "reset 与语义边界", groupKey: "reset", phase: "安静点 reset", action: "reset 写 base=0 并逐个 Cell.value=0", invariant: "reset 不删除 cells，只清值", effect: "reset"},
+        {group: "reset 与语义边界", groupKey: "reset", phase: "sumThenReset 边界", action: "sumThenReset 只能在安静点解释为精确交接", invariant: "LongAdder 用空间和近似读取换高竞争吞吐", effect: "boundary"}
+    ];
+
+    function cell(index, value, owner, probe, state, note, tone, active) {
+        return {index, value, owner, probe, state, note, tone, active};
+    }
+
+    function cells(size, overrides) {
+        return Array.from({length: size}, (_, index) => {
+            if (overrides && overrides[index]) {
+                return cell(
+                    index,
+                    overrides[index].value,
+                    overrides[index].owner,
+                    overrides[index].probe,
+                    overrides[index].state || "FILLED",
+                    overrides[index].note,
+                    overrides[index].tone,
+                    overrides[index].active
+                );
+            }
+            return cell(index, "-", "-", "-", "EMPTY", "slot 尚未创建 Cell", "empty", false);
+        });
+    }
+
+    function threads(activeName, overrides) {
+        const base = [
+            {name: "T1 add", state: "IDLE", desc: "等待下一次 add"},
+            {name: "T2 add", state: "IDLE", desc: "等待下一次 add"},
+            {name: "T3 add", state: "IDLE", desc: "等待下一次 add"},
+            {name: "Reader", state: "IDLE", desc: "尚未调用 sum/reset"}
+        ];
+        return base.map((thread) => ({
+            ...thread,
+            ...(overrides && overrides[thread.name] ? overrides[thread.name] : {}),
+            active: thread.name === activeName || Boolean(overrides && overrides[thread.name] && overrides[thread.name].active)
+        }));
+    }
+
+    function probes(items) {
+        return items.map((item) => ({
+            name: item.name,
+            value: item.value,
+            active: Boolean(item.active)
+        }));
+    }
+
+    const steps = [
+        {
+            title: "1) 构造 LongAdder：零值字段，尚无 Cell[]",
+            summary: "LongAdder 继承 Striped64，构造函数不分配 cells；base、cells、cellsBusy 都保持默认零值",
+            focus: "方法焦点：LongAdder() / Striped64 字段默认值",
+            base: "0",
+            cellsValue: "null",
+            busy: "0",
+            probe: "未读取",
+            sum: "0",
+            result: "无分片，所有 add 先尝试 base",
+            baseNote: "低竞争路径的唯一累加槽，CAS 更新",
+            stripeCaption: "cells=null，Cell[] 还没有创建",
+            fieldFocus: ["base", "cells"],
+            flowActive: [],
+            activeBase: true,
+            cells: [],
+            probeEvents: probes([
+                {name: "T1", value: "probe=0"},
+                {name: "T2", value: "probe=0"},
+                {name: "T3", value: "probe=0"},
+                {name: "Reader", value: "不参与 probe"}
+            ]),
+            threads: threads(null),
+            chain: [
+                "new LongAdder()",
+                "LongAdder extends Striped64",
+                "base=0, cells=null, cellsBusy=0"
+            ],
+            micro: [
+                "LongAdder 自身没有 AtomicLong 字段，真实承载在 Striped64.base 与 Striped64.cells",
+                "Cell[] 延迟到第一次可观测竞争后才初始化",
+                "cellsBusy 初始为 0，后续只保护初始化、补 Cell 和扩容"
+            ],
+            cas: [
+                "构造阶段没有 CAS；全部是对象默认零值"
+            ],
+            delta: [
+                "base: 0",
+                "cells: null",
+                "cellsBusy: 0"
+            ],
+            next: [
+                "第一个 add 在无竞争情况下会走最短路径：读 cells 为 null，然后 casBase"
+            ],
+            source: [
+                "LongAdder.java: public LongAdder()",
+                "Striped64.java: transient volatile long base / Cell[] cells / int cellsBusy"
+            ]
+        },
+        {
+            title: "2) T1 add(1)：base 快路径 CAS 成功",
+            summary: "add 先读 cells；cells 仍为 null 时尝试 casBase，成功就直接返回，不进入 longAccumulate",
+            focus: "方法焦点：LongAdder.add(long) 中的 cells null + casBase 成功分支",
+            base: "1",
+            cellsValue: "null",
+            busy: "0",
+            probe: "未读取",
+            sum: "1",
+            result: "T1 的 +1 只落在 base",
+            baseNote: "CAS base: 0 -> 1 成功",
+            stripeCaption: "没有竞争，不创建 cells",
+            fieldFocus: ["base", "result"],
+            flowActive: ["add", "read_cells", "cas_base", "done"],
+            activeBase: true,
+            cells: [],
+            probeEvents: probes([
+                {name: "T1", value: "未用 probe", active: true},
+                {name: "T2", value: "probe=0"},
+                {name: "T3", value: "probe=0"},
+                {name: "Reader", value: "sum=1"}
+            ]),
+            threads: threads("T1 add", {
+                "T1 add": {state: "RUNNING", desc: "add(1) 命中 casBase 快路"},
+                "T2 add": {state: "READY", desc: "尚未竞争 base"},
+                "T3 add": {state: "READY", desc: "尚未竞争 base"}
+            }),
+            chain: [
+                "LongAdder.add(1)",
+                "Cell[] as = cells",
+                "as == null",
+                "casBase(b = base, b + 1) 成功"
+            ],
+            micro: [
+                "add 入口把无竞争路径压到一次 volatile 读和一次 CAS",
+                "casBase 成功后 if 条件整体为 false，不会执行 longAccumulate",
+                "此时 cells 仍为 null，后续 sum 只读 base"
+            ],
+            cas: [
+                "CAS base: 0 -> 1 成功"
+            ],
+            delta: [
+                "base: 0 -> 1",
+                "cells/cellsBusy 不变"
+            ],
+            next: [
+                "当多个线程同时更新 base 时，失败的一方才会进入分片路径"
+            ],
+            source: [
+                "LongAdder.java: add(long x)",
+                "Striped64.java: final boolean casBase(long cmp, long val)"
+            ]
+        },
+        {
+            title: "3) base 发生竞争：一个线程赢，另一个线程转慢路",
+            summary: "T2 与 T3 同时以 base=1 计算新值；T3 先把 base 改成 2，T2 的 CAS 失败，进入 longAccumulate",
+            focus: "方法焦点：!casBase(...) 触发 longAccumulate(x, null, uncontended)",
+            base: "2",
+            cellsValue: "null",
+            busy: "0",
+            probe: "T2 未初始化",
+            sum: "2",
+            result: "T2 的 +1 尚未落账",
+            baseNote: "T3 CAS base 成功，T2 CAS base 失败",
+            stripeCaption: "第一次真实竞争出现，但 cells 还没有发布",
+            fieldFocus: ["base", "result"],
+            flowActive: ["add", "read_cells", "cas_base", "acc"],
+            activeBase: true,
+            cells: [],
+            probeEvents: probes([
+                {name: "T1", value: "base 已有 +1"},
+                {name: "T2", value: "CAS 失败", active: true},
+                {name: "T3", value: "CAS 成功"},
+                {name: "Reader", value: "sum=2"}
+            ]),
+            threads: threads("T2 add", {
+                "T2 add": {state: "RUNNING", desc: "CAS base 失败，进入 longAccumulate"},
+                "T3 add": {state: "RUNNING", desc: "CAS base: 1 -> 2 成功"},
+                "T1 add": {state: "IDLE", desc: "上一轮 add 已完成"}
+            }),
+            chain: [
+                "LongAdder.add(1)",
+                "cells == null",
+                "casBase(1, 2) 失败",
+                "longAccumulate(1, null, false)"
+            ],
+            micro: [
+                "LongAdder 不记录哪个线程失败，只把 wasUncontended=false 带入慢路",
+                "此时 T2 的增量还没有写入任何字段",
+                "base 已经包含 T1 和 T3 的更新"
+            ],
+            cas: [
+                "T3 CAS base: 1 -> 2 成功",
+                "T2 CAS base: 1 -> 2 失败"
+            ],
+            delta: [
+                "base: 1 -> 2",
+                "T2 进入 longAccumulate，cells 仍为 null"
+            ],
+            next: [
+                "longAccumulate 首先要取得当前线程 probe；probe 为 0 时会初始化 ThreadLocalRandom"
+            ],
+            source: [
+                "LongAdder.java: add(long x) 的 if 条件",
+                "Striped64.java: longAccumulate(long x, LongBinaryOperator fn, boolean wasUncontended)"
+            ]
+        },
+        {
+            title: "4) 初始化 probe：线程哈希码从 0 变为可用值",
+            summary: "T2 进入 longAccumulate 后发现 getProbe() 为 0，调用 ThreadLocalRandom.current() 初始化 probe，并把 wasUncontended 改回 true",
+            focus: "方法焦点：if ((h = getProbe()) == 0) ThreadLocalRandom.current()",
+            base: "2",
+            cellsValue: "null",
+            busy: "0",
+            probe: "T2: h=0x4b1d -> slot 1",
+            sum: "2",
+            result: "T2 获得 slot 选择依据",
+            baseNote: "base 暂未变化，T2 的 +1 仍未落账",
+            stripeCaption: "probe 只决定候选 slot，不等于已经更新",
+            fieldFocus: ["probe"],
+            flowActive: ["acc", "probe"],
+            activeBase: false,
+            cells: [],
+            probeEvents: probes([
+                {name: "T1", value: "probe=0"},
+                {name: "T2", value: "0x4b1d & 1 = 1", active: true},
+                {name: "T3", value: "probe=0"},
+                {name: "Reader", value: "不参与 probe"}
+            ]),
+            threads: threads("T2 add", {
+                "T2 add": {state: "RUNNING", desc: "初始化 probe，准备按 slot 分片"},
+                "T3 add": {state: "IDLE", desc: "base 更新已完成"}
+            }),
+            chain: [
+                "longAccumulate(1, null, false)",
+                "int h = getProbe()",
+                "h == 0",
+                "ThreadLocalRandom.current()",
+                "h = getProbe(); wasUncontended = true"
+            ],
+            micro: [
+                "probe 保存在 Thread.threadLocalRandomProbe 字段里",
+                "wasUncontended 被改成 true，表示刚初始化 probe 后可以继续尝试建表或更新",
+                "probe 初始化本身不修改 LongAdder 的 base/cells/cellsBusy"
+            ],
+            cas: [
+                "本步没有修改 LongAdder 字段的 CAS"
+            ],
+            delta: [
+                "T2.threadLocalRandomProbe: 0 -> 非 0",
+                "wasUncontended: false -> true",
+                "base/cells/cellsBusy 不变"
+            ],
+            next: [
+                "cells 仍为 null，T2 会尝试通过 cellsBusy 初始化 Cell[2]"
+            ],
+            source: [
+                "Striped64.java: getProbe()",
+                "Striped64.java: ThreadLocalRandom.current() 初始化 probe"
+            ]
+        },
+        {
+            title: "5) 抢 cellsBusy：T2 取得初始化门闩",
+            summary: "cells 仍为 null 且 cellsBusy 为 0，T2 通过 CAS 把 cellsBusy 改成 1，进入初始化临界区",
+            focus: "方法焦点：else if (cellsBusy == 0 && cells == as && casCellsBusy())",
+            base: "2",
+            cellsValue: "null",
+            busy: "1",
+            probe: "T2 -> slot 1",
+            sum: "2",
+            result: "T2 正在初始化 Cell[]",
+            baseNote: "base 暂未承载 T2 本次 +1",
+            stripeCaption: "cellsBusy=1 表示有人正在初始化或扩容",
+            fieldFocus: ["busy", "cells", "probe"],
+            flowActive: ["acc", "probe", "busy", "create"],
+            activeBase: false,
+            cells: [],
+            probeEvents: probes([
+                {name: "T1", value: "等待"},
+                {name: "T2", value: "持有 cellsBusy", active: true},
+                {name: "T3", value: "等待"},
+                {name: "Reader", value: "sum=2"}
+            ]),
+            threads: threads("T2 add", {
+                "T2 add": {state: "RUNNING", desc: "CAS cellsBusy 成功，准备 new Cell[2]"},
+                "T1 add": {state: "READY", desc: "若此时 add，可能看到 busy=1"},
+                "T3 add": {state: "READY", desc: "若此时 add，可能回退 base"}
+            }),
+            chain: [
+                "longAccumulate loop",
+                "cells == null",
+                "cellsBusy == 0",
+                "casCellsBusy() 成功",
+                "进入 try 初始化 cells"
+            ],
+            micro: [
+                "cellsBusy 是 volatile int，用 CAS 从 0 改 1",
+                "它只保护结构性写入：创建 cells、补 Cell、扩容",
+                "没有阻塞等待；拿不到门闩的线程继续走其它分支"
+            ],
+            cas: [
+                "CAS cellsBusy: 0 -> 1 成功"
+            ],
+            delta: [
+                "cellsBusy: 0 -> 1",
+                "cells 仍为 null，因为 Cell[2] 尚未赋给字段"
+            ],
+            next: [
+                "初始化窗口内若另一个线程也进入 longAccumulate，会因为 cellsBusy=1 而尝试回退 base"
+            ],
+            source: [
+                "Striped64.java: final boolean casCellsBusy()",
+                "Striped64.java: Initialize table 分支"
+            ]
+        },
+        {
+            title: "6) 初始化竞争：拿不到 cellsBusy 的线程回退 base",
+            summary: "T3 在 cells 尚未发布、cellsBusy 已为 1 时进入慢路；它不能建表，于是尝试 casBase 作为 fallback",
+            focus: "方法焦点：cells 为 null 且抢不到 cellsBusy 时的 casBase fallback",
+            base: "3",
+            cellsValue: "null",
+            busy: "1",
+            probe: "T3: fallback",
+            sum: "3",
+            result: "T3 的 +1 落到 base",
+            baseNote: "初始化门闩被 T2 持有，T3 CAS base: 2 -> 3",
+            stripeCaption: "fallback 保证初始化窗口不会让所有更新都等门闩",
+            fieldFocus: ["base", "busy"],
+            flowActive: ["acc", "busy", "cas_base", "done"],
+            activeBase: true,
+            cells: [],
+            probeEvents: probes([
+                {name: "T1", value: "空闲"},
+                {name: "T2", value: "busy=1"},
+                {name: "T3", value: "fallback base", active: true},
+                {name: "Reader", value: "sum=3"}
+            ]),
+            threads: threads("T3 add", {
+                "T2 add": {state: "RUNNING", desc: "仍在初始化 Cell[2]"},
+                "T3 add": {state: "RUNNING", desc: "抢不到 cellsBusy，回退 casBase 成功"},
+                "T1 add": {state: "IDLE", desc: "不参与本窗口"}
+            }),
+            chain: [
+                "longAccumulate loop",
+                "cells == null",
+                "cellsBusy != 0",
+                "casBase(v = base, v + 1) 成功",
+                "break"
+            ],
+            micro: [
+                "fallback 只在 cells 还不可用或表初始化竞争时出现",
+                "这不是丢失分片，而是用 base 承接一次更新",
+                "T2 的初始化完成后，后续更新会优先走 Cell[]"
+            ],
+            cas: [
+                "T3 CAS base: 2 -> 3 成功"
+            ],
+            delta: [
+                "base: 2 -> 3",
+                "cellsBusy 保持 1",
+                "cells 仍未发布"
+            ],
+            next: [
+                "T2 重新检查 cells 仍为 null 后，会把新建 Cell[2] 发布到 cells 字段"
+            ],
+            source: [
+                "Striped64.java: longAccumulate 最后的 casBase fallback",
+                "Striped64.java: cellsBusy 只保护结构，不阻塞所有加法"
+            ]
+        },
+        {
+            title: "7) 发布 Cell[2]：第一条分片落到 probe 对应 slot",
+            summary: "T2 在门闩内创建 Cell[2]，把本次 +1 放到 h&1 对应的 slot，然后 finally 释放 cellsBusy",
+            focus: "方法焦点：Cell[] rs = new Cell[2]; rs[h & 1] = new Cell(x); cells = rs",
+            base: "3",
+            cellsValue: "Cell[2]",
+            busy: "0",
+            probe: "T2 -> slot 1",
+            sum: "4",
+            result: "T2 的 +1 落到 cells[1]",
+            baseNote: "base 保存初始化前的累计值",
+            stripeCaption: "Cell[2] 已发布，slot 1 存放 T2 的第一次慢路更新",
+            fieldFocus: ["cells", "busy", "sum"],
+            flowActive: ["acc", "busy", "create", "done"],
+            activeBase: false,
+            cells: cells(2, {
+                1: {value: "1", owner: "T2", probe: "0x4b1d & 1", state: "NEW CELL", note: "保存 T2 失败后重试的 +1", tone: "created", active: true}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "未映射"},
+                {name: "T2", value: "slot 1", active: true},
+                {name: "T3", value: "base fallback"},
+                {name: "Reader", value: "base+cells=4"}
+            ]),
+            threads: threads("T2 add", {
+                "T2 add": {state: "RUNNING", desc: "发布 Cell[2] 并释放 cellsBusy"},
+                "T3 add": {state: "IDLE", desc: "fallback 已完成"}
+            }),
+            chain: [
+                "try Initialize table",
+                "if (cells == as)",
+                "Cell[] rs = new Cell[2]",
+                "rs[h & 1] = new Cell(x)",
+                "cells = rs",
+                "finally cellsBusy = 0"
+            ],
+            micro: [
+                "新建 Cell 的 value 直接是本次 x，不需要先写 0 再 CAS",
+                "cells 是 volatile，发布后其它线程会看到非 null 表",
+                "cellsBusy 用普通写 0 释放，后续结构性操作可再次竞争"
+            ],
+            cas: [
+                "本步结构发布没有 CAS；CAS 已在上一步取得 cellsBusy",
+                "finally 普通写 cellsBusy = 0"
+            ],
+            delta: [
+                "cells: null -> Cell[2]",
+                "cells[1].value: 新建为 1",
+                "cellsBusy: 1 -> 0"
+            ],
+            next: [
+                "只要 cells 非 null，后续 add 入口会优先按 probe 命中 Cell 并做 Cell CAS"
+            ],
+            source: [
+                "Striped64.java: Initialize table 分支",
+                "Striped64.Cell: volatile long value"
+            ]
+        },
+        {
+            title: "8) cells 非 null：直接命中 Cell CAS",
+            summary: "T1 再次 add 时发现 cells 已存在；它按自己的 probe 命中 cells[1]，对 Cell.value 做 CAS",
+            focus: "方法焦点：a = as[getProbe() & m]; a.cas(v, v + x)",
+            base: "3",
+            cellsValue: "Cell[2]",
+            busy: "0",
+            probe: "T1 -> slot 1",
+            sum: "5",
+            result: "cells[1]: 1 -> 2",
+            baseNote: "base 不动，热点转移到 Cell.value",
+            stripeCaption: "slot 1 被更新，Cell CAS 成功后 add 返回",
+            fieldFocus: ["cells", "probe", "sum"],
+            flowActive: ["add", "read_cells", "slot", "cell_cas", "done"],
+            activeBase: false,
+            cells: cells(2, {
+                1: {value: "2", owner: "T1/T2", probe: "slot 1", state: "CAS OK", note: "T1 CAS Cell.value: 1 -> 2", tone: "created", active: true}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1", active: true},
+                {name: "T2", value: "slot 1"},
+                {name: "T3", value: "待映射"},
+                {name: "Reader", value: "sum=5"}
+            ]),
+            threads: threads("T1 add", {
+                "T1 add": {state: "RUNNING", desc: "直接 CAS cells[1].value"},
+                "T2 add": {state: "IDLE", desc: "上一轮慢路完成"},
+                "T3 add": {state: "READY", desc: "下一步可能补空槽"}
+            }),
+            chain: [
+                "LongAdder.add(1)",
+                "cells != null",
+                "m = cells.length - 1",
+                "a = cells[getProbe() & m]",
+                "a.cas(v = a.value, v + 1) 成功"
+            ],
+            micro: [
+                "cells 非 null 后，add 入口不会再先尝试 casBase",
+                "Cell 使用 @sun.misc.Contended 减少数组相邻元素伪共享",
+                "Cell CAS 成功后不会进入 longAccumulate"
+            ],
+            cas: [
+                "CAS cells[1].value: 1 -> 2 成功"
+            ],
+            delta: [
+                "cells[1].value: 1 -> 2",
+                "base/cellsBusy 不变"
+            ],
+            next: [
+                "如果另一个线程的 probe 命中空 slot，会用 cellsBusy 填充新的 Cell"
+            ],
+            source: [
+                "LongAdder.java: add(long x) 命中 Cell CAS",
+                "Striped64.Cell: final boolean cas(long cmp, long val)"
+            ]
+        },
+        {
+            title: "9) 命中空 slot：用 cellsBusy 补一个新 Cell",
+            summary: "T3 的 probe 落到 cells[0]，该 slot 为空；它短暂持有 cellsBusy，把 new Cell(1) 填进去",
+            focus: "方法焦点：if (a == null) try to attach new Cell",
+            base: "3",
+            cellsValue: "Cell[2]",
+            busy: "0",
+            probe: "T3 -> slot 0",
+            sum: "6",
+            result: "cells[0] 新建为 1",
+            baseNote: "base 继续保留早期累计",
+            stripeCaption: "两个 slot 都有 Cell，后续可并行 CAS",
+            fieldFocus: ["cells", "busy", "probe"],
+            flowActive: ["acc", "probe", "busy", "create", "done"],
+            activeBase: false,
+            cells: cells(2, {
+                0: {value: "1", owner: "T3", probe: "0x80a2 & 1", state: "NEW CELL", note: "空 slot 补 Cell", tone: "created", active: true},
+                1: {value: "2", owner: "T1/T2", probe: "slot 1", state: "FILLED", note: "已有 Cell 保留原值", tone: "created"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1"},
+                {name: "T2", value: "slot 1"},
+                {name: "T3", value: "slot 0", active: true},
+                {name: "Reader", value: "sum=6"}
+            ]),
+            threads: threads("T3 add", {
+                "T3 add": {state: "RUNNING", desc: "抢 cellsBusy 并填 cells[0]"},
+                "T1 add": {state: "IDLE", desc: "已可与 T3 分散更新"},
+                "T2 add": {state: "IDLE", desc: "仍映射到 slot 1"}
+            }),
+            chain: [
+                "longAccumulate loop",
+                "cells != null",
+                "a = cells[(n - 1) & h] == null",
+                "casCellsBusy() 成功",
+                "rs[j] = new Cell(x)",
+                "cellsBusy = 0"
+            ],
+            micro: [
+                "补 Cell 前会在门闩内重新检查 cells 与 slot 是否仍然有效",
+                "新 Cell 的 value 直接等于本次 x",
+                "这一步扩展的是占用 slot 数，不是数组长度"
+            ],
+            cas: [
+                "CAS cellsBusy: 0 -> 1 成功",
+                "本次加法通过 new Cell(1) 落账，不做 Cell CAS"
+            ],
+            delta: [
+                "cells[0]: null -> Cell(value=1)",
+                "cellsBusy: 0 -> 1 -> 0",
+                "sum 视图: 5 -> 6"
+            ],
+            next: [
+                "当多个线程继续命中同一个非空 slot，Cell CAS 失败会驱动 probe 迁移和扩容判断"
+            ],
+            source: [
+                "Striped64.java: Try to attach new Cell 分支",
+                "Striped64.java: Recheck under lock"
+            ]
+        },
+        {
+            title: "10) add 入口 Cell CAS 失败：带着 wasUncontended=false 进慢路",
+            summary: "T2 与 T1 同时命中 cells[1]；T1 先把 value 改成 3，T2 的 Cell CAS 失败，于是进入 longAccumulate(false)",
+            focus: "方法焦点：!(uncontended = a.cas(...)) 后调用 longAccumulate",
+            base: "3",
+            cellsValue: "Cell[2]",
+            busy: "0",
+            probe: "T2 -> slot 1",
+            sum: "7",
+            result: "T2 的 +1 尚未落账",
+            baseNote: "base 无变化，冲突发生在 cells[1]",
+            stripeCaption: "slot 1 变成热点，T2 需要重新参与慢路循环",
+            fieldFocus: ["cells", "probe", "result"],
+            flowActive: ["add", "slot", "cell_cas", "acc"],
+            activeBase: false,
+            cells: cells(2, {
+                0: {value: "1", owner: "T3", probe: "slot 0", state: "FILLED", note: "未参与冲突", tone: "created"},
+                1: {value: "3", owner: "T1/T2", probe: "slot 1", state: "CAS FAIL", note: "T1 赢，T2 的 CAS 失败", tone: "collision", active: true}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1 赢"},
+                {name: "T2", value: "slot 1 失败", active: true},
+                {name: "T3", value: "slot 0"},
+                {name: "Reader", value: "sum=7"}
+            ]),
+            threads: threads("T2 add", {
+                "T1 add": {state: "RUNNING", desc: "CAS cells[1]: 2 -> 3 成功"},
+                "T2 add": {state: "RUNNING", desc: "CAS cells[1] 失败，进入 longAccumulate"},
+                "T3 add": {state: "IDLE", desc: "slot 0 暂无冲突"}
+            }),
+            chain: [
+                "LongAdder.add(1)",
+                "cells != null",
+                "a = cells[getProbe() & m]",
+                "a.cas(v, v + 1) 失败",
+                "longAccumulate(1, null, false)"
+            ],
+            micro: [
+                "入口处已知道 Cell CAS 失败，所以 wasUncontended=false",
+                "T2 的本次 +1 还没有写入任何位置",
+                "慢路第一轮不会立刻扩容，而是先处理已知失败"
+            ],
+            cas: [
+                "T1 CAS cells[1].value: 2 -> 3 成功",
+                "T2 CAS cells[1].value: 2 -> 3 失败"
+            ],
+            delta: [
+                "cells[1].value: 2 -> 3",
+                "T2 进入 longAccumulate(false)"
+            ],
+            next: [
+                "longAccumulate 看到 wasUncontended=false，会先改成 true 并推进 probe，而不是马上扩容"
+            ],
+            source: [
+                "LongAdder.java: add(long x) 的 Cell CAS 分支",
+                "Striped64.java: longAccumulate 参数 wasUncontended"
+            ]
+        },
+        {
+            title: "11) 已知失败只推进 probe：本轮不改 value",
+            summary: "T2 在 longAccumulate 中命中非空 Cell，但 wasUncontended=false；源码只把它改回 true，然后 advanceProbe",
+            focus: "方法焦点：else if (!wasUncontended) wasUncontended = true; h = advanceProbe(h)",
+            base: "3",
+            cellsValue: "Cell[2]",
+            busy: "0",
+            probe: "T2: slot 1 -> slot 0",
+            sum: "7",
+            result: "T2 迁移 probe，值未变化",
+            baseNote: "base 无变化",
+            stripeCaption: "probe 迁移是冲突消散的第一步",
+            fieldFocus: ["probe", "cells"],
+            flowActive: ["acc", "probe", "rehash"],
+            activeBase: false,
+            cells: cells(2, {
+                0: {value: "1", owner: "T3", probe: "slot 0", state: "FILLED", note: "T2 下一轮可能命中这里", tone: "created", active: true},
+                1: {value: "3", owner: "T1/T2", probe: "slot 1", state: "HOT", note: "上一轮冲突热点", tone: "collision"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1"},
+                {name: "T2", value: "advanceProbe -> slot 0", active: true},
+                {name: "T3", value: "slot 0"},
+                {name: "Reader", value: "sum=7"}
+            ]),
+            threads: threads("T2 add", {
+                "T2 add": {state: "RUNNING", desc: "消化已知失败，advanceProbe"},
+                "T1 add": {state: "IDLE", desc: "刚才的 CAS 已完成"},
+                "T3 add": {state: "READY", desc: "slot 0 可能成为新冲突点"}
+            }),
+            chain: [
+                "longAccumulate loop",
+                "a = cells[(n - 1) & h] != null",
+                "!wasUncontended",
+                "wasUncontended = true",
+                "h = advanceProbe(h)"
+            ],
+            micro: [
+                "这一步没有再次 CAS Cell.value",
+                "advanceProbe 使用 xorshift 更新 Thread.threadLocalRandomProbe",
+                "源码避免把一次已知失败直接当作扩容证据"
+            ],
+            cas: [
+                "本步没有 LongAdder 字段 CAS"
+            ],
+            delta: [
+                "T2.wasUncontended: false -> true",
+                "T2.probe: slot 1 -> slot 0",
+                "base/cells/cellsBusy 不变"
+            ],
+            next: [
+                "如果迁移后仍发生 Cell CAS 失败，才进入 collide 判定"
+            ],
+            source: [
+                "Striped64.java: else if (!wasUncontended)",
+                "Striped64.java: advanceProbe(int probe)"
+            ]
+        },
+        {
+            title: "12) 第一次真实碰撞：设置 collide，不扩容",
+            summary: "T2 迁移到 slot 0 后仍和 T3 冲突；第一次 Cell CAS 失败只把 collide 从 false 改为 true，然后继续 rehash",
+            focus: "方法焦点：else if (!collide) collide = true; h = advanceProbe(h)",
+            base: "3",
+            cellsValue: "Cell[2]",
+            busy: "0",
+            probe: "T2: slot 0 -> slot 1",
+            sum: "8",
+            result: "T2 仍未落账，T3 赢了一次 Cell CAS",
+            baseNote: "base 无变化",
+            stripeCaption: "一次碰撞只是扩容候选，不足以改变数组长度",
+            fieldFocus: ["probe", "cells", "result"],
+            flowActive: ["acc", "slot", "cell_cas", "probe", "rehash"],
+            activeBase: false,
+            cells: cells(2, {
+                0: {value: "2", owner: "T3", probe: "slot 0", state: "CAS FAIL", note: "T3 赢，T2 失败；collide=false -> true", tone: "collision", active: true},
+                1: {value: "3", owner: "T1/T2", probe: "slot 1", state: "HOT", note: "另一个已占用 slot", tone: "collision"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1"},
+                {name: "T2", value: "collide=true", active: true},
+                {name: "T3", value: "slot 0 赢"},
+                {name: "Reader", value: "sum=8"}
+            ]),
+            threads: threads("T2 add", {
+                "T2 add": {state: "RUNNING", desc: "Cell CAS 失败，标记 collide"},
+                "T3 add": {state: "RUNNING", desc: "CAS cells[0]: 1 -> 2 成功"},
+                "T1 add": {state: "READY", desc: "slot 1 仍可能冲突"}
+            }),
+            chain: [
+                "longAccumulate loop",
+                "a.cas(v, v + 1) 失败",
+                "n < NCPU 且 cells == as",
+                "!collide",
+                "collide = true",
+                "h = advanceProbe(h)"
+            ],
+            micro: [
+                "源码需要连续碰撞证据才扩容，避免偶发 CAS 失败导致过度扩容",
+                "collide 是 longAccumulate 的局部变量，不是 LongAdder 字段",
+                "T2 的本次 x 仍然在循环里等待落账"
+            ],
+            cas: [
+                "T3 CAS cells[0].value: 1 -> 2 成功",
+                "T2 CAS cells[0].value: 1 -> 2 失败"
+            ],
+            delta: [
+                "cells[0].value: 1 -> 2",
+                "T2.collide: false -> true",
+                "T2.probe 再次 advance"
+            ],
+            next: [
+                "若下一轮仍碰撞且表长还未到 NCPU，就会尝试 cellsBusy 扩容"
+            ],
+            source: [
+                "Striped64.java: else if (!collide) collide = true",
+                "Striped64.java: n >= NCPU || cells != as 的扩容边界"
+            ]
+        },
+        {
+            title: "13) 第二次连续碰撞：Cell[2] 扩容为 Cell[4]",
+            summary: "T2 又一次在非空 slot 上 CAS 失败，且 collide 已经为 true；它抢到 cellsBusy 后复制旧数组到新数组",
+            focus: "方法焦点：new Cell[n << 1] 后循环复制旧 Cell 引用",
+            base: "3",
+            cellsValue: "Cell[4]",
+            busy: "0",
+            probe: "T2 扩容后 continue",
+            sum: "9",
+            result: "数组长度 2 -> 4，T2 仍需重试",
+            baseNote: "base 无变化",
+            stripeCaption: "扩容复制旧 Cell 引用，值不被重新分配",
+            fieldFocus: ["cells", "busy", "probe"],
+            flowActive: ["acc", "cell_cas", "busy", "expand", "rehash"],
+            activeBase: false,
+            cells: cells(4, {
+                0: {value: "2", owner: "T3", probe: "old slot 0", state: "COPIED", note: "旧 Cell 引用复制到新表", tone: "expand"},
+                1: {value: "4", owner: "T1/T2", probe: "old slot 1", state: "COPIED", note: "T1 又赢一次 CAS，T2 触发扩容", tone: "collision", active: true}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1 赢"},
+                {name: "T2", value: "expand 2->4", active: true},
+                {name: "T3", value: "slot 0"},
+                {name: "Reader", value: "sum=9"}
+            ]),
+            threads: threads("T2 add", {
+                "T2 add": {state: "RUNNING", desc: "抢 cellsBusy，复制 Cell[2] 到 Cell[4]"},
+                "T1 add": {state: "RUNNING", desc: "CAS cells[1]: 3 -> 4 成功"},
+                "T3 add": {state: "IDLE", desc: "slot 0 保持"}
+            }),
+            chain: [
+                "longAccumulate loop",
+                "a.cas(...) 失败",
+                "collide == true",
+                "cellsBusy == 0 && casCellsBusy()",
+                "if (cells == as) new Cell[n << 1]",
+                "cells = rs"
+            ],
+            micro: [
+                "扩容不是把 value 拆分到新 slot，而是复制 Cell 对象引用",
+                "扩容完成后 collide=false，并 continue 重新用新 mask 定位",
+                "本次 T2 的 +1 还没有写入；扩容只改变后续碰撞概率"
+            ],
+            cas: [
+                "T1 CAS cells[1].value: 3 -> 4 成功",
+                "T2 CAS cells[1].value 失败",
+                "T2 CAS cellsBusy: 0 -> 1 成功"
+            ],
+            delta: [
+                "cells.length: 2 -> 4",
+                "cells[0]/cells[1] 引用被复制",
+                "cellsBusy: 0 -> 1 -> 0"
+            ],
+            next: [
+                "T2 使用扩容后的 mask 重新计算 slot，如果命中新空槽就创建 Cell"
+            ],
+            source: [
+                "Striped64.java: Expand table unless stale",
+                "Striped64.java: continue; Retry with expanded table"
+            ]
+        },
+        {
+            title: "14) 新 mask 命中空 slot：扩容收益真正出现",
+            summary: "扩容后 T2 的 probe 用 3 做 mask，落到原来不存在的 slot 2；它创建新 Cell 后本次 +1 才完成",
+            focus: "方法焦点：扩容后重新循环，再进入空 slot 创建分支",
+            base: "3",
+            cellsValue: "Cell[4]",
+            busy: "0",
+            probe: "T2 -> slot 2",
+            sum: "10",
+            result: "cells[2] 新建为 1",
+            baseNote: "base 无变化",
+            stripeCaption: "新 slot 吸收碰撞线程，热点被拆开",
+            fieldFocus: ["cells", "probe", "sum"],
+            flowActive: ["acc", "probe", "create", "done"],
+            activeBase: false,
+            cells: cells(4, {
+                0: {value: "2", owner: "T3", probe: "slot 0", state: "FILLED", note: "旧分片继续可用", tone: "created"},
+                1: {value: "4", owner: "T1", probe: "slot 1", state: "FILLED", note: "旧热点保留当前值", tone: "created"},
+                2: {value: "1", owner: "T2", probe: "0x4b1d & 3", state: "NEW CELL", note: "T2 的 +1 终于落账", tone: "created", active: true}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1"},
+                {name: "T2", value: "slot 2", active: true},
+                {name: "T3", value: "slot 0"},
+                {name: "Reader", value: "sum=10"}
+            ]),
+            threads: threads("T2 add", {
+                "T2 add": {state: "RUNNING", desc: "扩容后命中空 slot，创建 cells[2]"},
+                "T1 add": {state: "IDLE", desc: "留在 slot 1"},
+                "T3 add": {state: "IDLE", desc: "留在 slot 0"}
+            }),
+            chain: [
+                "longAccumulate continue",
+                "重新读取 cells",
+                "j = (n - 1) & h",
+                "cells[2] == null",
+                "new Cell(1)",
+                "break"
+            ],
+            micro: [
+                "扩容收益体现在新的 mask 能区分原先冲突的 probe",
+                "T2 不是把旧 Cell 的值搬到新 slot，而是在新 slot 记录本次增量",
+                "至此 T2 这次 add 才真正完成"
+            ],
+            cas: [
+                "CAS cellsBusy: 0 -> 1 成功",
+                "new Cell(1) 写入 cells[2]"
+            ],
+            delta: [
+                "cells[2]: null -> Cell(value=1)",
+                "sum 视图: 9 -> 10"
+            ],
+            next: [
+                "当表长接近 CPU 数或旧表已经过期，后续冲突不会无限扩容"
+            ],
+            source: [
+                "Striped64.java: empty slot + Try to attach new Cell",
+                "Striped64.java: table size is capped by NCPU"
+            ]
+        },
+        {
+            title: "15) 容量边界：达到 NCPU 或旧表过期时只迁移 probe",
+            summary: "如果数组长度已经达到 NCPU，或当前线程持有的是旧 cells 引用，CAS 失败不会扩容，只会清 collide 并继续调整 probe",
+            focus: "方法焦点：else if (n >= NCPU || cells != as) collide = false",
+            base: "3",
+            cellsValue: "Cell[4]",
+            busy: "0",
+            probe: "T1 advanceProbe",
+            sum: "10",
+            result: "不扩容，继续找低冲突 slot",
+            baseNote: "base 无变化",
+            stripeCaption: "示意 NCPU=4，Cell[4] 已达到扩容上限",
+            fieldFocus: ["cells", "probe"],
+            flowActive: ["acc", "cell_cas", "probe", "rehash"],
+            activeBase: false,
+            cells: cells(4, {
+                0: {value: "2", owner: "T3", probe: "slot 0", state: "FILLED", note: "上限内继续承载更新", tone: "created"},
+                1: {value: "4", owner: "T1", probe: "slot 1", state: "CAS FAIL", note: "达到上限，T1 改 probe", tone: "collision", active: true},
+                2: {value: "1", owner: "T2", probe: "slot 2", state: "FILLED", note: "新分片已可用", tone: "created"},
+                3: {value: "-", owner: "-", probe: "-", state: "EMPTY", note: "空槽可能被后续 probe 命中", tone: "empty"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "n >= NCPU", active: true},
+                {name: "T2", value: "slot 2"},
+                {name: "T3", value: "slot 0"},
+                {name: "Reader", value: "sum=10"}
+            ]),
+            threads: threads("T1 add", {
+                "T1 add": {state: "RUNNING", desc: "达到容量边界，advanceProbe"},
+                "T2 add": {state: "IDLE", desc: "slot 2 稳定"},
+                "T3 add": {state: "IDLE", desc: "slot 0 稳定"}
+            }),
+            chain: [
+                "longAccumulate loop",
+                "a.cas(...) 失败",
+                "n >= NCPU 或 cells != as",
+                "collide = false",
+                "h = advanceProbe(h)"
+            ],
+            micro: [
+                "JDK 用 NCPU 限制表长，避免线程数超过 CPU 时无界扩容",
+                "cells != as 表示其它线程已经换表，当前线程不应基于旧表继续扩",
+                "上限后的收敛依赖 probe 随机迁移，而不是继续增加数组"
+            ],
+            cas: [
+                "本步的 Cell CAS 失败",
+                "没有 cellsBusy CAS，也没有扩容 CAS"
+            ],
+            delta: [
+                "T1.probe 被 advanceProbe 更新",
+                "cells.length 保持 4",
+                "base/cellsBusy 不变"
+            ],
+            next: [
+                "稳定后，线程分散到不同 Cell，上层看到的是高吞吐但非单点线性化的计数器"
+            ],
+            source: [
+                "Striped64.java: else if (n >= NCPU || cells != as)",
+                "Striped64.java: advanceProbe(int probe)"
+            ]
+        },
+        {
+            title: "16) 稳定分散：多个 Cell 分别 CAS",
+            summary: "冲突消散后，T1、T2、T3 大多在不同 slot 上更新，各自只竞争自己的 Cell.value",
+            focus: "方法焦点：add 入口的常态 Cell CAS 成功路径",
+            base: "3",
+            cellsValue: "Cell[4]",
+            busy: "0",
+            probe: "T1:1 / T2:2 / T3:0",
+            sum: "15",
+            result: "热点被拆成多个 Cell",
+            baseNote: "base 保留低竞争阶段与 fallback 的累计",
+            stripeCaption: "总和由 base + 非空 Cell.value 共同维护",
+            fieldFocus: ["cells", "sum"],
+            flowActive: ["add", "slot", "cell_cas", "done"],
+            activeBase: false,
+            cells: cells(4, {
+                0: {value: "3", owner: "T3", probe: "slot 0", state: "CAS OK", note: "T3 独立更新", tone: "created", active: true},
+                1: {value: "5", owner: "T1", probe: "slot 1", state: "CAS OK", note: "T1 独立更新", tone: "created", active: true},
+                2: {value: "4", owner: "T2", probe: "slot 2", state: "CAS OK", note: "T2 独立更新", tone: "created", active: true},
+                3: {value: "-", owner: "-", probe: "-", state: "EMPTY", note: "暂未使用", tone: "empty"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1", active: true},
+                {name: "T2", value: "slot 2", active: true},
+                {name: "T3", value: "slot 0", active: true},
+                {name: "Reader", value: "sum=15"}
+            ]),
+            threads: threads(null, {
+                "T1 add": {state: "RUNNING", desc: "CAS cells[1] 成功", active: true},
+                "T2 add": {state: "RUNNING", desc: "CAS cells[2] 成功", active: true},
+                "T3 add": {state: "RUNNING", desc: "CAS cells[0] 成功", active: true},
+                "Reader": {state: "READY", desc: "下一阶段读取 sum"}
+            }),
+            chain: [
+                "LongAdder.add(1)",
+                "cells != null",
+                "a = cells[getProbe() & m]",
+                "a.cas(v, v + 1) 成功",
+                "return"
+            ],
+            micro: [
+                "LongAdder 的吞吐优势来自减少同一个内存地址上的 CAS 竞争",
+                "base 与 Cell.value 都是 volatile long，但没有全局锁",
+                "不同 Cell 的更新没有全局顺序点"
+            ],
+            cas: [
+                "T1 CAS cells[1].value: 4 -> 5 成功",
+                "T2 CAS cells[2].value: 3 -> 4 成功",
+                "T3 CAS cells[0].value: 2 -> 3 成功"
+            ],
+            delta: [
+                "cells[0].value: 2 -> 3",
+                "cells[1].value: 4 -> 5",
+                "cells[2].value: 3 -> 4"
+            ],
+            next: [
+                "读取方调用 sum() 时，不会锁住这些更新，只是按当前看到的值遍历"
+            ],
+            source: [
+                "LongAdder.java: add(long x)",
+                "Striped64.java: Cell.cas(long cmp, long val)"
+            ]
+        },
+        {
+            title: "17) sum() 先读 base：读取路径不阻塞更新",
+            summary: "Reader 调用 sum()，第一步把 base 读到局部变量 sum；此时更新线程仍可继续 CAS Cell",
+            focus: "方法焦点：long sum = base",
+            base: "3",
+            cellsValue: "Cell[4]",
+            busy: "0",
+            probe: "Reader 无 probe",
+            sum: "局部 sum=3",
+            result: "读快照开始",
+            baseNote: "Reader 已读取 base=3",
+            stripeCaption: "读取过程没有 cellsBusy，也没有阻塞 add",
+            fieldFocus: ["base", "sum"],
+            flowActive: ["sum", "read_base"],
+            activeBase: true,
+            cells: cells(4, {
+                0: {value: "3", owner: "T3", probe: "slot 0", state: "FILLED", note: "尚未扫描", tone: "created"},
+                1: {value: "5", owner: "T1", probe: "slot 1", state: "FILLED", note: "尚未扫描", tone: "created"},
+                2: {value: "4", owner: "T2", probe: "slot 2", state: "FILLED", note: "尚未扫描", tone: "created"},
+                3: {value: "-", owner: "-", probe: "-", state: "EMPTY", note: "跳过 null", tone: "empty"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "可继续 add"},
+                {name: "T2", value: "可继续 add"},
+                {name: "T3", value: "可继续 add"},
+                {name: "Reader", value: "sum=base=3", active: true}
+            ]),
+            threads: threads("Reader", {
+                "Reader": {state: "RUNNING", desc: "sum() 读取 base 到局部变量"},
+                "T1 add": {state: "READY", desc: "仍可 CAS Cell"},
+                "T2 add": {state: "READY", desc: "仍可 CAS Cell"},
+                "T3 add": {state: "READY", desc: "仍可 CAS Cell"}
+            }),
+            chain: [
+                "LongAdder.sum()",
+                "Cell[] as = cells",
+                "long sum = base",
+                "if (as != null) 扫描 cells"
+            ],
+            micro: [
+                "sum() 只是读取 volatile base 与每个 Cell.value",
+                "读取期间不设置 cellsBusy",
+                "Reader 不使用 probe，因为 probe 只服务更新定位"
+            ],
+            cas: [
+                "sum() 不做 CAS"
+            ],
+            delta: [
+                "Reader 局部变量 sum: 0 -> base(3)",
+                "LongAdder 字段无变化"
+            ],
+            next: [
+                "Reader 接着按数组下标扫描每个非 null Cell"
+            ],
+            source: [
+                "LongAdder.java: public long sum()",
+                "LongAdder.java: long sum = base"
+            ]
+        },
+        {
+            title: "18) sum() 扫描 cells：逐个累加非 null Cell.value",
+            summary: "Reader 依次读取 cells[0]、cells[1]、cells[2]；每个读到的 value 加到局部 sum 上",
+            focus: "方法焦点：for each Cell a: if (a != null) sum += a.value",
+            base: "3",
+            cellsValue: "Cell[4]",
+            busy: "0",
+            probe: "Reader 扫描 index",
+            sum: "3 + 3 + 5 + 4 = 15",
+            result: "若无并发更新，返回准确值",
+            baseNote: "base 已读入局部变量",
+            stripeCaption: "青色标记表示本步被 Reader 读取的 Cell",
+            fieldFocus: ["cells", "sum"],
+            flowActive: ["sum", "read_base", "scan", "return"],
+            activeBase: false,
+            cells: cells(4, {
+                0: {value: "3", owner: "T3", probe: "slot 0", state: "READ", note: "Reader 已加入局部 sum", tone: "read", active: true},
+                1: {value: "5", owner: "T1", probe: "slot 1", state: "READ", note: "Reader 已加入局部 sum", tone: "read", active: true},
+                2: {value: "4", owner: "T2", probe: "slot 2", state: "READ", note: "Reader 已加入局部 sum", tone: "read", active: true},
+                3: {value: "-", owner: "-", probe: "-", state: "EMPTY", note: "null slot 跳过", tone: "empty"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1"},
+                {name: "T2", value: "slot 2"},
+                {name: "T3", value: "slot 0"},
+                {name: "Reader", value: "return 15", active: true}
+            ]),
+            threads: threads("Reader", {
+                "Reader": {state: "RUNNING", desc: "遍历 cells 并累加 value"},
+                "T1 add": {state: "IDLE", desc: "本步无并发更新"},
+                "T2 add": {state: "IDLE", desc: "本步无并发更新"},
+                "T3 add": {state: "IDLE", desc: "本步无并发更新"}
+            }),
+            chain: [
+                "sum()",
+                "for (int i = 0; i < as.length; ++i)",
+                "if ((a = as[i]) != null)",
+                "sum += a.value",
+                "return sum"
+            ],
+            micro: [
+                "没有并发更新时，base + cells 的读取结果准确",
+                "null slot 不贡献值",
+                "sum() 不改变 base 或 Cell.value"
+            ],
+            cas: [
+                "sum() 不做 CAS，也不持有 cellsBusy"
+            ],
+            delta: [
+                "Reader 局部 sum: 3 -> 6 -> 11 -> 15",
+                "LongAdder 字段无变化"
+            ],
+            next: [
+                "如果扫描期间有线程继续 add，返回值就不再是原子快照"
+            ],
+            source: [
+                "LongAdder.java: sum() for 循环",
+                "LongAdder.java: concurrent updates might not be incorporated"
+            ]
+        },
+        {
+            title: "19) 扫描期间并发更新：返回值可能落后",
+            summary: "Reader 读过 cells[1]=5 后，T1 又把 cells[1] 改成 6；Reader 不会回头重读，因此返回值不包含这次更新",
+            focus: "方法焦点：sum() 的非原子快照说明",
+            base: "3",
+            cellsValue: "Cell[4]",
+            busy: "0",
+            probe: "T1 -> slot 1",
+            sum: "Reader 仍返回 15，实际可见总和已到 16",
+            result: "sum 不是线性化读取",
+            baseNote: "base 已读，未重读",
+            stripeCaption: "橙色 Cell 表示 Reader 扫过后又被更新",
+            fieldFocus: ["cells", "sum", "result"],
+            flowActive: ["sum", "scan", "cell_cas", "boundary"],
+            activeBase: false,
+            cells: cells(4, {
+                0: {value: "3", owner: "T3", probe: "slot 0", state: "READ", note: "已被 Reader 计入", tone: "read"},
+                1: {value: "6", owner: "T1", probe: "slot 1", state: "UPDATED AFTER READ", note: "Reader 读到 5 后，T1 CAS 到 6", tone: "collision", active: true},
+                2: {value: "4", owner: "T2", probe: "slot 2", state: "READ", note: "已被 Reader 计入", tone: "read"},
+                3: {value: "-", owner: "-", probe: "-", state: "EMPTY", note: "null slot 跳过", tone: "empty"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1 +1", active: true},
+                {name: "T2", value: "slot 2"},
+                {name: "T3", value: "slot 0"},
+                {name: "Reader", value: "不会回读 slot 1", active: true}
+            ]),
+            threads: threads(null, {
+                "Reader": {state: "RUNNING", desc: "已经读过 cells[1]，继续向后扫描", active: true},
+                "T1 add": {state: "RUNNING", desc: "CAS cells[1]: 5 -> 6 成功", active: true},
+                "T2 add": {state: "IDLE", desc: "本步未更新"},
+                "T3 add": {state: "IDLE", desc: "本步未更新"}
+            }),
+            chain: [
+                "Reader: sum() 扫描 cells[1] 读到 5",
+                "T1: add(1) CAS cells[1]: 5 -> 6",
+                "Reader: 继续扫描 cells[2]",
+                "Reader: return 15"
+            ],
+            micro: [
+                "LongAdder 文档明确说 sum() 不是 atomic snapshot",
+                "这不违反线程安全；因为 LongAdder 的目标是统计吞吐，不是同步判定",
+                "如果要把返回值作为精确状态转换条件，应使用别的同步结构"
+            ],
+            cas: [
+                "T1 CAS cells[1].value: 5 -> 6 成功",
+                "Reader 不做 CAS，不重试读取"
+            ],
+            delta: [
+                "cells[1].value: 5 -> 6",
+                "Reader 局部 sum 仍按旧值计算"
+            ],
+            next: [
+                "sum 返回后，只能解释为调用期间观察到的一个近似统计结果"
+            ],
+            source: [
+                "LongAdder.java: sum() Javadoc 的 NOT atomic snapshot",
+                "LongAdder.java: sum() 返回遍历结果"
+            ]
+        },
+        {
+            title: "20) sum 返回边界：适合统计，不适合同步判定",
+            summary: "Reader 返回 15，但此刻内存里的 base+cells 已经能算出 16；这正是 LongAdder 用吞吐换精确快照的边界",
+            focus: "语义焦点：统计计数器 vs 细粒度同步控制",
+            base: "3",
+            cellsValue: "Cell[4]",
+            busy: "0",
+            probe: "无",
+            sum: "返回值 15 / 当前可见 16",
+            result: "读值不是全局线性化点",
+            baseNote: "base=3 是返回值的一部分",
+            stripeCaption: "绿色为已稳定分片，橙色为 Reader 返回后可见的新值",
+            fieldFocus: ["sum", "result"],
+            flowActive: ["sum", "return", "boundary"],
+            activeBase: false,
+            cells: cells(4, {
+                0: {value: "3", owner: "T3", probe: "slot 0", state: "COUNTED", note: "Reader 已计入", tone: "read"},
+                1: {value: "6", owner: "T1", probe: "slot 1", state: "NEWER", note: "返回值未包含最新 +1", tone: "collision", active: true},
+                2: {value: "4", owner: "T2", probe: "slot 2", state: "COUNTED", note: "Reader 已计入", tone: "read"},
+                3: {value: "-", owner: "-", probe: "-", state: "EMPTY", note: "暂未使用", tone: "empty"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "slot 1=6"},
+                {name: "T2", value: "slot 2=4"},
+                {name: "T3", value: "slot 0=3"},
+                {name: "Reader", value: "return 15", active: true}
+            ]),
+            threads: threads("Reader", {
+                "Reader": {state: "RUNNING", desc: "返回调用期间观察到的总和"},
+                "T1 add": {state: "IDLE", desc: "最新 +1 已落在 Cell"},
+                "T2 add": {state: "IDLE", desc: "稳定分片"},
+                "T3 add": {state: "IDLE", desc: "稳定分片"}
+            }),
+            chain: [
+                "LongAdder.sum()",
+                "return sum",
+                "调用者得到 long 值",
+                "并发更新的纳入与否不保证"
+            ],
+            micro: [
+                "没有并发更新时，sum 是准确结果",
+                "有并发更新时，返回值只保证由实际读到的 volatile 字段组成",
+                "LongAdder 适合频率、指标、统计类计数"
+            ],
+            cas: [
+                "本步没有 CAS；只是返回局部变量"
+            ],
+            delta: [
+                "Reader 方法返回 15",
+                "LongAdder 字段保持 base=3, cells[1]=6"
+            ],
+            next: [
+                "reset 与 sumThenReset 也延续这个边界：只有在没有并发更新时才适合作为清零周期"
+            ],
+            source: [
+                "LongAdder.java: sum()",
+                "LongAdder Javadoc: not for fine-grained synchronization control"
+            ]
+        },
+        {
+            title: "21) reset：只在安静点清值，不删除 Cell[]",
+            summary: "reset 把 base 写 0，再把每个非 null Cell.value 写 0；Cell[] 结构保留，后续高竞争可复用",
+            focus: "方法焦点：base = 0L; for cells value = 0L",
+            base: "0",
+            cellsValue: "Cell[4]",
+            busy: "0",
+            probe: "无",
+            sum: "0",
+            result: "清值完成，结构保留",
+            baseNote: "reset 普通写 base=0",
+            stripeCaption: "所有非空 Cell.value 被清零，但 slot 仍在",
+            fieldFocus: ["base", "cells", "sum"],
+            flowActive: ["reset", "read_base", "scan", "return"],
+            activeBase: true,
+            cells: cells(4, {
+                0: {value: "0", owner: "T3", probe: "slot 0", state: "RESET", note: "Cell 保留，value 清 0", tone: "read", active: true},
+                1: {value: "0", owner: "T1", probe: "slot 1", state: "RESET", note: "Cell 保留，value 清 0", tone: "read", active: true},
+                2: {value: "0", owner: "T2", probe: "slot 2", state: "RESET", note: "Cell 保留，value 清 0", tone: "read", active: true},
+                3: {value: "-", owner: "-", probe: "-", state: "EMPTY", note: "null slot 仍为 null", tone: "empty"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "后续复用 slot 1"},
+                {name: "T2", value: "后续复用 slot 2"},
+                {name: "T3", value: "后续复用 slot 0"},
+                {name: "Reader", value: "reset", active: true}
+            ]),
+            threads: threads("Reader", {
+                "Reader": {state: "RUNNING", desc: "在无并发更新安静点执行 reset"},
+                "T1 add": {state: "IDLE", desc: "暂停更新"},
+                "T2 add": {state: "IDLE", desc: "暂停更新"},
+                "T3 add": {state: "IDLE", desc: "暂停更新"}
+            }),
+            chain: [
+                "LongAdder.reset()",
+                "base = 0L",
+                "for each non-null Cell",
+                "a.value = 0L"
+            ],
+            micro: [
+                "reset 不是 CAS 循环，也不加锁",
+                "Cell[] 不被置 null，避免下一轮高竞争重新建表",
+                "Javadoc 要求只在已知没有并发更新时使用"
+            ],
+            cas: [
+                "reset 不做 CAS；使用普通 volatile 字段写"
+            ],
+            delta: [
+                "base: 3 -> 0",
+                "cells[0/1/2].value: 非 0 -> 0",
+                "cells.length 保持 4"
+            ],
+            next: [
+                "sumThenReset 把 sum 和 reset 合成一个方法，但并发边界仍然不是原子切换"
+            ],
+            source: [
+                "LongAdder.java: public void reset()",
+                "LongAdder.java: reset Javadoc"
+            ]
+        },
+        {
+            title: "22) sumThenReset 与使用边界：不是精确交接棒",
+            summary: "sumThenReset 先累加再清零，但没有锁住 add；若并发更新穿插其中，返回值与清零后的状态都不能当作严格时间边界",
+            focus: "语义焦点：LongAdder 是统计计数器，不是同步状态机",
+            base: "0 / 或并发写入值",
+            cellsValue: "Cell[4]",
+            busy: "0",
+            probe: "increment/decrement 都委托 add",
+            sum: "只在安静点可解释为最终值",
+            result: "闭环：base / cells / 近似快照",
+            baseNote: "后续 add 仍会复用 base 或现有 Cell",
+            stripeCaption: "LongAdder 用更多内存和近似读取，换高竞争更新吞吐",
+            fieldFocus: ["sum", "result"],
+            flowActive: ["sum", "reset", "boundary"],
+            activeBase: false,
+            cells: cells(4, {
+                0: {value: "0", owner: "T3", probe: "slot 0", state: "REUSABLE", note: "下一轮 add 可复用", tone: "read"},
+                1: {value: "0", owner: "T1", probe: "slot 1", state: "REUSABLE", note: "下一轮 add 可复用", tone: "read"},
+                2: {value: "0", owner: "T2", probe: "slot 2", state: "REUSABLE", note: "下一轮 add 可复用", tone: "read"},
+                3: {value: "-", owner: "-", probe: "-", state: "EMPTY", note: "未使用 slot 仍为空", tone: "empty"}
+            }),
+            probeEvents: probes([
+                {name: "T1", value: "increment -> add(1)"},
+                {name: "T2", value: "decrement -> add(-1)"},
+                {name: "T3", value: "add(x)"},
+                {name: "Reader", value: "sumThenReset 边界", active: true}
+            ]),
+            threads: threads("Reader", {
+                "Reader": {state: "RUNNING", desc: "复盘 sumThenReset 与语义边界"},
+                "T1 add": {state: "READY", desc: "increment 只是 add(1)"},
+                "T2 add": {state: "READY", desc: "decrement 只是 add(-1)"},
+                "T3 add": {state: "READY", desc: "高竞争继续走 Cell[]"}
+            }),
+            chain: [
+                "LongAdder.sumThenReset()",
+                "long sum = base; base = 0L",
+                "for each Cell: sum += value; value = 0L",
+                "increment() -> add(1L)",
+                "decrement() -> add(-1L)"
+            ],
+            micro: [
+                "sumThenReset 适合统计周期的 quiescent point，不适合和 add 并发做精确交接",
+                "LongAdder 没有 equals/hashCode/compareTo，因为实例预期持续变化",
+                "高竞争吞吐提升的代价是更高空间占用和非原子读取"
+            ],
+            cas: [
+                "sumThenReset 本身不做 CAS；并发 add 仍可能同时 CAS base 或 Cell.value"
+            ],
+            delta: [
+                "流程结束时保留可复用 Cell[]",
+                "下一轮低竞争或高竞争路径按当前 cells 状态继续"
+            ],
+            next: [
+                "流程结束：base 快路、Cell[] 初始化、cellsBusy、probe 迁移、扩容、sum/reset 边界均已覆盖"
+            ],
+            source: [
+                "LongAdder.java: sumThenReset(), increment(), decrement()",
+                "LongAdder Javadoc: higher throughput at the expense of higher space consumption"
+            ]
+        }
+    ];
+
+    if (stepMeta.length !== steps.length) {
+        throw new Error(`stepMeta length ${stepMeta.length} does not match steps length ${steps.length}`);
+    }
+
+    const el = {
+        prevBtn: document.getElementById("prevBtn"),
+        nextBtn: document.getElementById("nextBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        actionValue: document.getElementById("actionValue"),
+        invariantValue: document.getElementById("invariantValue"),
+        baseValue: document.getElementById("baseValue"),
+        cellsValue: document.getElementById("cellsValue"),
+        busyValue: document.getElementById("busyValue"),
+        probeValue: document.getElementById("probeValue"),
+        sumValue: document.getElementById("sumValue"),
+        resultValue: document.getElementById("resultValue"),
+        flowAdd: document.getElementById("flowAdd"),
+        flowStripe: document.getElementById("flowStripe"),
+        flowRead: document.getElementById("flowRead"),
+        threadLane: document.getElementById("threadLane"),
+        baseStrip: document.getElementById("baseStrip"),
+        baseNote: document.getElementById("baseNote"),
+        baseLarge: document.getElementById("baseLarge"),
+        cellsWrap: document.getElementById("cellsWrap"),
+        probeStrip: document.getElementById("probeStrip"),
+        stripeCaption: document.getElementById("stripeCaption"),
+        stepTitle: document.getElementById("stepTitle"),
+        stepSummary: document.getElementById("stepSummary"),
+        focusBox: document.getElementById("focusBox"),
+        chainList: document.getElementById("chainList"),
+        microList: document.getElementById("microList"),
+        casList: document.getElementById("casList"),
+        deltaList: document.getElementById("deltaList"),
+        nextList: document.getElementById("nextList"),
+        sourceList: document.getElementById("sourceList"),
+        timeline: document.getElementById("timeline"),
+        stepCounter: document.getElementById("stepCounter"),
+        stage: document.getElementById("stage")
+    };
+
+    const statusCards = Array.from(document.querySelectorAll(".status[data-field]"));
+
+    let current = 0;
+
+    function fullStep(index) {
+        return {
+            ...stepMeta[index],
+            ...steps[index]
+        };
+    }
+
+    function stateClass(state) {
+        const s = String(state || "").toUpperCase();
+        if (s === "RUNNING") return "b-running";
+        if (s === "READY") return "b-ready";
+        if (s === "PARKED") return "b-parked";
+        if (s === "EXCEPTION") return "b-ex";
+        return "b-idle";
+    }
+
+    function appendText(parent, tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        node.textContent = text;
+        parent.appendChild(node);
+        return node;
+    }
+
+    function flashStage() {
+        el.stage.classList.remove("flash");
+        void el.stage.offsetWidth;
+        el.stage.classList.add("flash");
+        window.setTimeout(() => el.stage.classList.remove("flash"), 220);
+    }
+
+    function renderStatus(step) {
+        el.baseValue.textContent = step.base;
+        el.cellsValue.textContent = step.cellsValue;
+        el.busyValue.textContent = step.busy;
+        el.probeValue.textContent = step.probe;
+        el.sumValue.textContent = step.sum;
+        el.resultValue.textContent = step.result;
+
+        const activeFields = new Set(step.fieldFocus || []);
+        statusCards.forEach((card) => {
+            card.classList.toggle("active", activeFields.has(card.dataset.field));
+        });
+    }
+
+    function renderFlow(step) {
+        function paintRow(target, label, nodes) {
+            const active = new Set(step.flowActive || []);
+            target.innerHTML = "";
+            target.className = `flow-row${nodes.some((node) => active.has(node.id)) ? " active" : ""}`;
+
+            appendText(target, "div", "flow-label", label);
+            const track = appendText(target, "div", "flow-track", "");
+
+            nodes.forEach((node, index) => {
+                const box = appendText(track, "div", `flow-node${active.has(node.id) ? " active" : ""}`, node.label);
+                box.title = node.label;
+
+                if (index < nodes.length - 1) {
+                    const arrow = appendText(track, "span", "flow-arrow", "→");
+                    arrow.setAttribute("aria-hidden", "true");
+                }
+            });
+        }
+
+        paintRow(el.flowAdd, "add", flowRows.add);
+        paintRow(el.flowStripe, "stripe", flowRows.stripe);
+        paintRow(el.flowRead, "read", flowRows.read);
+    }
+
+    function renderThreads(step) {
+        el.threadLane.innerHTML = "";
+        step.threads.forEach((thread) => {
+            const item = document.createElement("article");
+            item.className = `thread${thread.active ? " active" : ""}`;
+
+            const top = appendText(item, "div", "thread-top", "");
+            appendText(top, "strong", "thread-name", thread.name);
+            appendText(top, "span", `badge ${stateClass(thread.state)}`, thread.state);
+            appendText(item, "p", "", thread.desc);
+
+            el.threadLane.appendChild(item);
+        });
+    }
+
+    function renderStripes(step) {
+        el.baseStrip.classList.toggle("active", Boolean(step.activeBase));
+        el.baseNote.textContent = step.baseNote;
+        el.baseLarge.textContent = step.base;
+        el.stripeCaption.textContent = step.stripeCaption;
+
+        el.cellsWrap.innerHTML = "";
+        const items = step.cells || [];
+        if (items.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "cells-grid cells-0";
+            const card = document.createElement("article");
+            card.className = "cell-card empty active";
+            appendText(card, "div", "cell-index", "cells=null");
+            appendText(card, "div", "cell-line", "尚未创建 Cell[]，所有成功更新都在 base 或初始化窗口的 fallback base 中");
+            empty.appendChild(card);
+            el.cellsWrap.appendChild(empty);
+        } else {
+            const grid = document.createElement("div");
+            grid.className = `cells-grid cells-${Math.min(items.length, 4)}`;
+            items.forEach((item) => {
+                const classes = ["cell-card"];
+                if (item.tone) classes.push(item.tone);
+                if (item.active) classes.push("active");
+                const card = document.createElement("article");
+                card.className = classes.join(" ");
+
+                const top = appendText(card, "div", "cell-top", "");
+                appendText(top, "span", "cell-index", `cells[${item.index}]`);
+                appendText(top, "span", "cell-state", item.state);
+
+                const valueLine = appendText(card, "div", "cell-line", "");
+                appendText(valueLine, "span", "label", "value: ");
+                appendText(valueLine, "span", "cell-value", item.value);
+
+                const ownerLine = appendText(card, "div", "cell-line", "");
+                appendText(ownerLine, "span", "label", "owner: ");
+                ownerLine.append(document.createTextNode(item.owner));
+
+                const probeLine = appendText(card, "div", "cell-line", "");
+                appendText(probeLine, "span", "label", "probe: ");
+                probeLine.append(document.createTextNode(item.probe));
+
+                const noteLine = appendText(card, "div", "cell-line", "");
+                appendText(noteLine, "span", "label", "note: ");
+                noteLine.append(document.createTextNode(item.note));
+
+                grid.appendChild(card);
+            });
+            el.cellsWrap.appendChild(grid);
+        }
+
+        el.probeStrip.innerHTML = "";
+        (step.probeEvents || []).forEach((event) => {
+            const token = document.createElement("div");
+            token.className = `probe-token${event.active ? " active" : ""}`;
+            appendText(token, "strong", "", event.name);
+            appendText(token, "span", "", event.value);
+            el.probeStrip.appendChild(token);
+        });
+    }
+
+    function renderList(target, lines, emptyText) {
+        target.innerHTML = "";
+        if (!lines || lines.length === 0) {
+            appendText(target, "li", "empty", emptyText);
+            return;
+        }
+
+        lines.forEach((line) => {
+            appendText(target, "li", "", line);
+        });
+    }
+
+    function renderTimeline() {
+        el.timeline.innerHTML = "";
+        let activeChip = null;
+        let previousGroup = null;
+        const currentGroup = fullStep(current).group;
+        steps.forEach((rawStep, index) => {
+            const step = fullStep(index);
+            if (step.group !== previousGroup) {
+                const groupLastIndex = stepMeta.reduce((last, item, itemIndex) => {
+                    return item.group === step.group ? itemIndex : last;
+                }, -1);
+                const groupClasses = ["timeline-group"];
+                if (groupLastIndex < current) groupClasses.push("done");
+                if (step.group === currentGroup) groupClasses.push("active");
+                const groupLabel = appendText(el.timeline, "div", groupClasses.join(" "), step.group);
+                groupLabel.setAttribute("role", "heading");
+                groupLabel.setAttribute("aria-level", "3");
+                previousGroup = step.group;
+            }
+
+            const chip = document.createElement("button");
+            chip.type = "button";
+            const classes = ["step-chip"];
+            if (index < current) classes.push("done");
+            if (index === current) classes.push("active");
+            const label = rawStep.title.replace(/^\d+\)\s*/, "");
+            chip.className = classes.join(" ");
+            chip.setAttribute("aria-label", `跳转到第 ${index + 1} 步：${step.group} / ${step.phase}，${label}`);
+            if (index === current) {
+                chip.setAttribute("aria-current", "step");
+                activeChip = chip;
+            }
+
+            const labelWrap = appendText(chip, "span", "step-chip-copy", "");
+            appendText(labelWrap, "span", "step-chip-title", label);
+            appendText(labelWrap, "span", "step-chip-phase", step.phase);
+            chip.addEventListener("click", () => {
+                current = index;
+                render(true);
+            });
+            el.timeline.appendChild(chip);
+        });
+
+        if (activeChip) {
+            activeChip.scrollIntoView({block: "nearest", inline: "nearest"});
+        }
+    }
+
+    function render(animate) {
+        const step = fullStep(current);
+
+        el.stage.dataset.effect = step.effect || "none";
+        el.stage.dataset.group = step.groupKey || "none";
+        el.actionValue.textContent = step.action;
+        el.invariantValue.textContent = step.invariant;
+
+        renderStatus(step);
+        renderFlow(step);
+        renderThreads(step);
+        renderStripes(step);
+
+        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepSummary.textContent = step.summary;
+        el.focusBox.textContent = step.focus;
+
+        renderList(el.chainList, step.chain, "暂无调用链");
+        renderList(el.microList, step.micro, "暂无细节点");
+        renderList(el.casList, step.cas, "本步无 CAS / 原子操作");
+        renderList(el.deltaList, step.delta, "本步无字段变化");
+        renderList(el.nextList, step.next, "流程结束");
+        renderList(el.sourceList, step.source, "暂无源码锚点");
+
+        renderTimeline();
+        el.stepCounter.textContent = `第 ${current + 1} / ${steps.length} 步`;
+
+        el.prevBtn.disabled = current === 0;
+        el.nextBtn.disabled = current === steps.length - 1;
+
+        if (animate) flashStage();
+    }
+
+    function prev() {
+        if (current > 0) {
+            current -= 1;
+            render(true);
+        }
+    }
+
+    function next() {
+        if (current < steps.length - 1) {
+            current += 1;
+            render(true);
+        }
+    }
+
+    el.prevBtn.addEventListener("click", prev);
+    el.nextBtn.addEventListener("click", next);
+    el.resetBtn.addEventListener("click", () => {
+        current = 0;
+        render(true);
+    });
+
+    window.addEventListener("keydown", (event) => {
+        const target = event.target;
+        const tag = target && target.tagName ? target.tagName.toUpperCase() : "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (target && target.isContentEditable)) {
+            return;
+        }
+
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            prev();
+        } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            next();
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            current = 0;
+            render(true);
+        }
+    });
+
+    render(false);
+})();
+</script>
+</body>
+</html>

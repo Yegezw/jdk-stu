@@ -1,0 +1,2560 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>FutureTask 状态机全细节流程图</title>
+    <style>
+        :root {
+            --bg: #f6f7f9;
+            --surface: #ffffff;
+            --surface-soft: #f8fafc;
+            --line: #d8e0ec;
+            --line-strong: #b9c6d8;
+            --text: #111827;
+            --muted: #5f6b7a;
+            --blue: #2563eb;
+            --blue-soft: #eef5ff;
+            --green: #15803d;
+            --green-soft: #ecfdf3;
+            --orange: #c2410c;
+            --orange-soft: #fff4e6;
+            --red: #dc2626;
+            --red-soft: #fff1f2;
+            --violet: #6d28d9;
+            --violet-soft: #f5f3ff;
+            --teal: #0f766e;
+            --teal-soft: #ecfdfb;
+            --shadow: 0 8px 22px rgba(17, 24, 39, 0.07);
+            --radius: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        button {
+            font: inherit;
+        }
+
+        .app {
+            width: min(1540px, calc(100vw - 24px));
+            min-width: 1420px;
+            height: 100vh;
+            margin: 0 auto;
+            padding: 12px 0 18px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 10px;
+            overflow: hidden;
+        }
+
+        .app > *,
+        .topbar > *,
+        .workspace > *,
+        .stage > * {
+            min-width: 0;
+        }
+
+        .topbar,
+        .timeline-panel,
+        .stage,
+        .explain {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .topbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+        }
+
+        .hero {
+            display: grid;
+            gap: 4px;
+        }
+
+        .eyebrow {
+            margin: 0;
+            color: var(--blue);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-size: 24px;
+            line-height: 1.25;
+        }
+
+        .hero p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn {
+            min-height: 34px;
+            border: 1px solid var(--line-strong);
+            background: #ffffff;
+            color: #243044;
+            border-radius: var(--radius);
+            padding: 6px 10px;
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+        }
+
+        .btn:hover {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .btn:focus-visible,
+        .step-chip:focus-visible {
+            outline: 2px solid var(--blue);
+            outline-offset: 2px;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .model-pill,
+        .control-note,
+        .counter-pill {
+            border-radius: var(--radius);
+            padding: 6px 9px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .model-pill {
+            border: 1px solid #bdd3f5;
+            background: var(--blue-soft);
+            color: #1e3a8a;
+        }
+
+        .control-note {
+            color: #64748b;
+            background: var(--surface-soft);
+            border: 1px solid #e2e8f0;
+        }
+
+        .counter-pill {
+            color: #36506f;
+            background: #f0f6ff;
+            border: 1px solid #c8daf5;
+            white-space: nowrap;
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 240px minmax(760px, 1fr) 370px;
+            grid-template-areas: "timeline stage explain";
+            gap: 10px;
+            align-items: stretch;
+            min-height: 0;
+        }
+
+        .timeline-panel,
+        .stage,
+        .explain {
+            height: auto;
+            min-height: 0;
+            max-height: none;
+        }
+
+        .timeline-panel {
+            grid-area: timeline;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            overflow: hidden;
+        }
+
+        .timeline-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            padding: 10px 10px 8px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .timeline-head h2 {
+            margin: 0;
+            font-size: 14px;
+            color: #243044;
+        }
+
+        .timeline-head span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .timeline {
+            counter-reset: step;
+            display: grid;
+            align-content: start;
+            gap: 7px;
+            padding: 10px;
+            overflow: auto;
+        }
+
+        .timeline-group {
+            margin: 7px 0 1px;
+            border: 1px solid #dce4ef;
+            border-radius: var(--radius);
+            background: #f8fafc;
+            color: #475569;
+            padding: 5px 8px;
+            font-size: 11px;
+            font-weight: 900;
+        }
+
+        .timeline-group.done {
+            border-color: #b7e4c4;
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .timeline-group.active {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .step-chip {
+            counter-increment: step;
+            width: 100%;
+            height: max-content;
+            min-height: 58px;
+            border: 1px solid #d1dae8;
+            background: #ffffff;
+            color: #334155;
+            border-radius: var(--radius);
+            padding: 7px 8px;
+            display: grid;
+            grid-template-columns: 30px minmax(0, 1fr);
+            gap: 8px;
+            align-items: start;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .step-chip::before {
+            content: counter(step);
+            width: 28px;
+            height: 28px;
+            margin-top: 1px;
+            display: grid;
+            place-items: center;
+            border-radius: 999px;
+            background: #e9eef6;
+            color: #475569;
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .step-chip:hover {
+            border-color: #93b5e8;
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .step-chip.done {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .step-chip.done::before {
+            background: #d9f7e3;
+            color: var(--green);
+        }
+
+        .step-chip.active {
+            border-color: #1d4ed8;
+            background: #1d4ed8;
+            color: #ffffff;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+        }
+
+        .step-chip.active::before {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+        }
+
+        .step-chip-title,
+        .step-chip-phase {
+            min-width: 0;
+        }
+
+        .step-chip-copy {
+            display: grid;
+            gap: 3px;
+            align-self: start;
+            min-width: 0;
+            line-height: 1.34;
+        }
+
+        .step-chip-title {
+            overflow-wrap: anywhere;
+            line-height: 1.32;
+        }
+
+        .step-chip-phase {
+            color: #64748b;
+            font-size: 10px;
+            font-weight: 800;
+            line-height: 1.3;
+            white-space: normal;
+            overflow: visible;
+        }
+
+        .step-chip.done .step-chip-phase {
+            color: #15803d;
+        }
+
+        .step-chip.active .step-chip-phase {
+            color: rgba(255, 255, 255, 0.76);
+        }
+
+        .stage {
+            grid-area: stage;
+            padding: 10px;
+            display: grid;
+            grid-template-rows: auto auto 140px 120px minmax(0, 1fr);
+            gap: 8px;
+            overflow: hidden;
+            transition: box-shadow 0.16s ease, border-color 0.16s ease;
+        }
+
+        .stage.flash {
+            border-color: #93b5e8;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.13), var(--shadow);
+        }
+
+        .step-context {
+            height: 62px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .context-card {
+            height: 62px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 7px 8px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            align-content: start;
+            overflow: hidden;
+            transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .context-card span {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .context-card strong {
+            display: block;
+            margin-top: 4px;
+            color: #111827;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+
+        .context-value {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stage[data-effect="cas"] .context-action,
+        .stage[data-effect="run"] .context-action {
+            border-color: #93c5fd;
+            background: var(--blue-soft);
+        }
+
+        .stage[data-effect="publish"] .context-action,
+        .stage[data-effect="complete"] .context-action {
+            border-color: #9ed8b2;
+            background: var(--green-soft);
+        }
+
+        .stage[data-effect="stack"] .context-action,
+        .stage[data-effect="wait"] .context-action,
+        .stage[data-effect="cleanup"] .context-action {
+            border-color: #c4b5fd;
+            background: var(--violet-soft);
+        }
+
+        .stage[data-effect="park"] .context-action,
+        .stage[data-effect="interrupt"] .context-action {
+            border-color: #fed7aa;
+            background: var(--orange-soft);
+        }
+
+        .stage[data-effect="cancel"] .context-action,
+        .stage[data-effect="exception"] .context-action {
+            border-color: #fca5a5;
+            background: var(--red-soft);
+        }
+
+        .stage[data-effect="report"] .context-action {
+            border-color: #99f6e4;
+            background: var(--teal-soft);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 7px;
+        }
+
+        .status {
+            min-height: 66px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface-soft);
+            padding: 7px 8px;
+            overflow: hidden;
+            transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .status.active {
+            border-color: #60a5fa;
+            background: #f0f6ff;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.16);
+        }
+
+        .stage[data-effect="publish"] .status.active,
+        .stage[data-effect="complete"] .status.active {
+            border-color: #86d6a0;
+            background: var(--green-soft);
+            box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.12);
+        }
+
+        .stage[data-effect="stack"] .status.active,
+        .stage[data-effect="wait"] .status.active,
+        .stage[data-effect="cleanup"] .status.active {
+            border-color: #b9a7ff;
+            background: var(--violet-soft);
+            box-shadow: 0 0 0 2px rgba(109, 40, 217, 0.11);
+        }
+
+        .stage[data-effect="park"] .status.active,
+        .stage[data-effect="interrupt"] .status.active {
+            border-color: #fdba74;
+            background: var(--orange-soft);
+            box-shadow: 0 0 0 2px rgba(194, 65, 12, 0.10);
+        }
+
+        .stage[data-effect="cancel"] .status.active,
+        .stage[data-effect="exception"] .status.active {
+            border-color: #fca5a5;
+            background: var(--red-soft);
+            box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.10);
+        }
+
+        .status span {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .status strong {
+            display: block;
+            margin-top: 4px;
+            color: #111827;
+            font-size: 13px;
+            line-height: 1.34;
+            overflow-wrap: anywhere;
+        }
+
+        .status-result strong {
+            white-space: normal;
+            overflow-wrap: anywhere;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        .status-state strong,
+        .status-waiters strong {
+            font-family: Menlo, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .flow {
+            min-height: 0;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #fcfdff;
+            padding: 8px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 7px;
+            overflow: hidden;
+        }
+
+        .flow h3,
+        .lane h3 {
+            margin: 0;
+            color: #334155;
+            font-size: 13px;
+        }
+
+        .flow-grid {
+            min-height: 0;
+            display: grid;
+            gap: 7px;
+            align-content: start;
+        }
+
+        .flow-row {
+            display: grid;
+            grid-template-columns: 42px minmax(0, 1fr);
+            gap: 7px;
+            align-items: center;
+            min-width: 0;
+            overflow: visible;
+        }
+
+        .flow-label {
+            border-radius: 999px;
+            background: #e5e9f0;
+            color: #475569;
+            padding: 3px 7px;
+            font-size: 10px;
+            font-weight: 900;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .flow-row.active .flow-label {
+            background: var(--blue-soft);
+            color: #1d4ed8;
+        }
+
+        .flow-track {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+            overflow: visible;
+        }
+
+        .flow-node {
+            flex: 1 1 0;
+            min-width: 0;
+            border: 1px solid #d8e0ec;
+            border-radius: var(--radius);
+            background: #ffffff;
+            color: #334155;
+            padding: 4px 6px;
+            font-size: 11px;
+            font-weight: 800;
+            text-align: center;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .flow-node.active {
+            border-color: #60a5fa;
+            background: #ffffff;
+            color: #334155;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .flow-arrow {
+            flex: 0 0 10px;
+            color: #94a3b8;
+            font-size: 12px;
+            font-weight: 900;
+            text-align: center;
+        }
+
+        .lane {
+            min-height: 0;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #fcfdff;
+            padding: 8px;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 7px;
+            overflow: hidden;
+        }
+
+        .threads {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-auto-rows: 76px;
+            gap: 7px;
+        }
+
+        .thread {
+            height: 76px;
+            border: 1px solid #d8e0ec;
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 7px;
+            overflow: hidden;
+        }
+
+        .thread.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .thread-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .thread-name {
+            font-size: 12px;
+            font-weight: 800;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .badge {
+            border-radius: 999px;
+            padding: 2px 7px;
+            font-size: 10px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .b-running {
+            background: #dcfce7;
+            color: #065f46;
+        }
+
+        .b-ready {
+            background: #dbeafe;
+            color: #1e3a8a;
+        }
+
+        .b-parked {
+            background: var(--orange-soft);
+            color: #9a3412;
+        }
+
+        .b-idle {
+            background: #e5e9f0;
+            color: #475569;
+        }
+
+        .b-ex {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .thread p {
+            margin: 6px 0 0;
+            color: #475569;
+            font-size: 11px;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+        }
+
+        .stack-wrap {
+            min-height: 0;
+            display: grid;
+            gap: 8px;
+            align-content: start;
+            overflow: auto;
+            padding-right: 2px;
+        }
+
+        .stack-empty {
+            min-height: 124px;
+            border: 1px dashed #c7d2e3;
+            border-radius: var(--radius);
+            padding: 10px;
+            display: grid;
+            place-content: center;
+            gap: 4px;
+            background: var(--surface-soft);
+            text-align: center;
+        }
+
+        .stack-empty strong {
+            color: #334155;
+            font-size: 13px;
+        }
+
+        .stack-empty span {
+            color: var(--muted);
+            font-family: Menlo, Consolas, monospace;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .stack-chain {
+            display: flex;
+            flex-wrap: nowrap;
+            gap: 8px;
+            align-items: stretch;
+            align-content: flex-start;
+            min-height: 0;
+        }
+
+        .stack-node {
+            width: 188px;
+            border: 1px solid #d2dceb;
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 7px;
+        }
+
+        .stack-node.top {
+            border-color: #a78bfa;
+            background: var(--violet-soft);
+        }
+
+        .stack-node.cleared {
+            border-color: #cbd5e1;
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+        .stack-node.detached {
+            border-color: #99f6e4;
+            background: var(--teal-soft);
+        }
+
+        .stack-node.active {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+        }
+
+        .node-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .node-title {
+            color: #111827;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .node-role {
+            border-radius: 999px;
+            padding: 1px 6px;
+            background: #e5e9f0;
+            color: #334155;
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .node-line {
+            margin: 1px 0;
+            color: #334155;
+            font-size: 11px;
+            overflow-wrap: anywhere;
+        }
+
+        .node-line .label {
+            color: #64748b;
+        }
+
+        .stack-link {
+            width: 34px;
+            display: grid;
+            place-items: center;
+            color: #64748b;
+            font-size: 23px;
+            font-weight: 900;
+            line-height: 1;
+            user-select: none;
+        }
+
+        .explain {
+            grid-area: explain;
+            padding: 10px;
+            display: grid;
+            align-content: start;
+            gap: 8px;
+            overflow: auto;
+        }
+
+        .explain h2 {
+            margin: 0;
+            font-size: 18px;
+            line-height: 1.32;
+        }
+
+        .explain .summary {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .focus-box {
+            border: 1px solid #bdd3f5;
+            border-radius: var(--radius);
+            background: var(--blue-soft);
+            color: #1e3a8a;
+            padding: 7px 8px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .detail {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #ffffff;
+            padding: 8px;
+        }
+
+        .detail h3 {
+            margin: 0 0 6px;
+            color: #334155;
+            font-size: 12px;
+        }
+
+        .detail ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            gap: 5px;
+        }
+
+        .detail li {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: var(--surface-soft);
+            padding: 5px 7px;
+            color: #334155;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+
+        .detail li.empty {
+            color: var(--muted);
+            border-style: dashed;
+        }
+
+        .note {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="app">
+    <header class="topbar">
+        <section class="hero" aria-labelledby="pageTitle">
+            <p class="eyebrow">FutureTask + Callable + Treiber waiters 栈</p>
+            <h1 id="pageTitle">FutureTask 状态机全细节流程图</h1>
+            <p>按 Java 8 源码单步视角展示 state、runner、outcome、waiters、cancel(true) 中断窗口和 get() 等待路径</p>
+        </section>
+
+        <section class="controls" aria-label="流程控制">
+            <button id="prevBtn" class="btn" type="button">上一步</button>
+            <button id="nextBtn" class="btn" type="button">下一步</button>
+            <button id="resetBtn" class="btn" type="button">重置</button>
+            <div class="counter-pill" id="stepCounter">-</div>
+            <div class="model-pill">Java 8 / FutureTask / Treiber Stack</div>
+            <div class="control-note">快捷键：← / → / Home</div>
+        </section>
+    </header>
+
+    <main class="workspace">
+        <nav class="timeline-panel" aria-labelledby="timelineTitle">
+            <div class="timeline-head">
+                <h2 id="timelineTitle">源码步骤</h2>
+                <span>可点击跳转</span>
+            </div>
+            <div id="timeline" class="timeline"></div>
+        </nav>
+
+        <article id="stage" class="stage" aria-live="off">
+            <section class="step-context" aria-label="当前步骤机制">
+                <div class="context-card context-action">
+                    <span>当前动作</span>
+                    <strong id="actionValue" class="context-value">-</strong>
+                </div>
+                <div class="context-card context-invariant">
+                    <span>机制不变量</span>
+                    <strong id="invariantValue" class="context-value">-</strong>
+                </div>
+            </section>
+
+            <section class="status-grid" aria-label="FutureTask 字段快照">
+                <div class="status status-runner" data-field="runner">
+                    <span>runner</span>
+                    <strong id="runnerValue">-</strong>
+                </div>
+                <div class="status status-callable" data-field="callable">
+                    <span>callable</span>
+                    <strong id="callableValue">-</strong>
+                </div>
+                <div class="status status-outcome" data-field="outcome">
+                    <span>outcome</span>
+                    <strong id="outcomeValue">-</strong>
+                </div>
+                <div class="status status-state" data-field="state">
+                    <span>state</span>
+                    <strong id="stateValue">-</strong>
+                </div>
+                <div class="status status-waiters" data-field="waiters">
+                    <span>waiters</span>
+                    <strong id="waitersValue">-</strong>
+                </div>
+                <div class="status status-result" data-field="result">
+                    <span>本步结果</span>
+                    <strong id="resultValue">-</strong>
+                </div>
+            </section>
+
+            <section class="flow" aria-labelledby="flowTitle">
+                <h3 id="flowTitle">源码路径总览</h3>
+                <div class="flow-grid">
+                    <div id="flowRun" class="flow-row"></div>
+                    <div id="flowGet" class="flow-row"></div>
+                    <div id="flowCancel" class="flow-row"></div>
+                </div>
+            </section>
+
+            <section class="lane lane-threads" aria-labelledby="threadLaneTitle">
+                <h3 id="threadLaneTitle">线程泳道</h3>
+                <div id="threadLane" class="threads"></div>
+            </section>
+
+            <section class="lane lane-stack" aria-labelledby="stackLaneTitle">
+                <h3 id="stackLaneTitle">waiters：Treiber 单链表栈</h3>
+                <div id="stackWrap" class="stack-wrap"></div>
+            </section>
+        </article>
+
+        <aside class="explain" aria-labelledby="stepTitle">
+            <h2 id="stepTitle">-</h2>
+            <p id="stepSummary" class="summary">-</p>
+            <div id="focusBox" class="focus-box">-</div>
+
+            <section class="detail">
+                <h3>调用链（当前步骤）</h3>
+                <ul id="chainList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>方法内细节点（逐条）</h3>
+                <ul id="microList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>CAS / 原子操作</h3>
+                <ul id="casList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>关键字段变化</h3>
+                <ul id="deltaList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>为何进入下一步</h3>
+                <ul id="nextList"></ul>
+            </section>
+
+            <section class="detail">
+                <h3>源码锚点</h3>
+                <ul id="sourceList"></ul>
+            </section>
+
+            <div class="note">教学化逐指令视图，专注 Java 8 FutureTask 主路径、取消窗口和等待栈清理边界</div>
+        </aside>
+    </main>
+</div>
+
+<script>
+(() => {
+    const flowRows = {
+        run: [
+            {id: "run_start", label: "run()"},
+            {id: "runner_cas", label: "runner CAS"},
+            {id: "call", label: "call()"},
+            {id: "set", label: "set / ex"},
+            {id: "finish", label: "finish"},
+            {id: "done", label: "done"}
+        ],
+        get: [
+            {id: "get", label: "get()"},
+            {id: "await", label: "awaitDone"},
+            {id: "node", label: "WaitNode"},
+            {id: "push", label: "CAS push"},
+            {id: "park", label: "park"},
+            {id: "report", label: "report"}
+        ],
+        cancel: [
+            {id: "cancel", label: "cancel"},
+            {id: "cancel_cas", label: "state CAS"},
+            {id: "interrupting", label: "INTERRUPTING"},
+            {id: "interrupt", label: "interrupt"},
+            {id: "interrupted", label: "INTERRUPTED"},
+            {id: "cancel_finish", label: "finish"}
+        ]
+    };
+
+    const stepMeta = [
+        {group: "初始化", groupKey: "init", phase: "构造", action: "写 callable，volatile 写 state=NEW", invariant: "state 是完成状态的唯一发布门", effect: "publish"},
+        {group: "初始化", groupKey: "init", phase: "runner 抢占", action: "run() CAS 设置 runner", invariant: "只有一个线程能执行 callable", effect: "run"},
+        {group: "初始化", groupKey: "init", phase: "callable 执行", action: "runner 调用 callable.call()", invariant: "state 仍为 NEW，结果尚未发布", effect: "run"},
+        {group: "get 等待路径", groupKey: "wait", phase: "进入 awaitDone", action: "get() 发现 state<=COMPLETING", invariant: "未完成时 get 只能等待，不能读 outcome", effect: "wait"},
+        {group: "get 等待路径", groupKey: "wait", phase: "创建 WaitNode", action: "awaitDone 创建当前线程节点", invariant: "节点先本地创建，不立刻入栈", effect: "stack"},
+        {group: "get 等待路径", groupKey: "wait", phase: "Treiber 入栈", action: "CAS(waiters, old, q) 成功", invariant: "waiters 是单链表栈顶，不是 AQS 队列", effect: "stack"},
+        {group: "get 等待路径", groupKey: "wait", phase: "第二等待者", action: "G2 头插到 waiters 栈顶", invariant: "新节点 next 指向旧栈顶", effect: "stack"},
+        {group: "get 等待路径", groupKey: "wait", phase: "park 等待", action: "queued 后 LockSupport.park(this)", invariant: "park 只改变调度状态，不改 FutureTask 字段", effect: "park"},
+        {group: "正常完成", groupKey: "normal", phase: "call 返回", action: "callable.call() 返回 result", invariant: "返回值只有 set() CAS 成功后才可发布", effect: "run"},
+        {group: "正常完成", groupKey: "normal", phase: "抢完成权", action: "CAS state: NEW -> COMPLETING", invariant: "COMPLETING 表示完成权已拿到但 outcome 未安全发布", effect: "cas"},
+        {group: "正常完成", groupKey: "normal", phase: "写 outcome", action: "outcome = result", invariant: "读者看到 COMPLETING 必须等待，不读 outcome", effect: "publish"},
+        {group: "正常完成", groupKey: "normal", phase: "发布终态", action: "putOrderedInt state=NORMAL", invariant: "只有 state > COMPLETING 后 report 才能读取 outcome", effect: "complete"},
+        {group: "正常完成", groupKey: "normal", phase: "摘下等待栈", action: "finishCompletion CAS(waiters, q, null)", invariant: "一次性摘栈，再逐个 unpark", effect: "cleanup"},
+        {group: "正常完成", groupKey: "normal", phase: "唤醒与清理", action: "unpark 等待线程，done()，callable=null", invariant: "unpark 只给唤醒机会，不改变结果字段", effect: "complete"},
+        {group: "正常完成", groupKey: "normal", phase: "report 正常结果", action: "get 线程醒来并 report(NORMAL)", invariant: "NORMAL 才返回 outcome", effect: "report"},
+        {group: "异常完成", groupKey: "exceptional", phase: "捕获异常", action: "call() 抛出，进入 setException", invariant: "异常被记录到 outcome，不在 runner 处直接抛给 get 调用者", effect: "exception"},
+        {group: "异常完成", groupKey: "exceptional", phase: "发布 EXCEPTIONAL", action: "COMPLETING -> EXCEPTIONAL", invariant: "get 最终抛 ExecutionException(outcome)", effect: "exception"},
+        {group: "取消路径", groupKey: "cancel", phase: "未运行取消", action: "cancel(false) CAS NEW->CANCELLED", invariant: "CANCELLED 无 runner interrupt，也不写 outcome", effect: "cancel"},
+        {group: "取消路径", groupKey: "cancel", phase: "运行中取消", action: "cancel(true) CAS NEW->INTERRUPTING", invariant: "INTERRUPTING 是 interrupt(runner) 的进行中窗口", effect: "cancel"},
+        {group: "取消路径", groupKey: "cancel", phase: "发送中断", action: "读取 runner 并调用 interrupt()", invariant: "interrupt 是线程信号，不直接让 callable 停止", effect: "interrupt"},
+        {group: "取消路径", groupKey: "cancel", phase: "发布 INTERRUPTED", action: "putOrderedInt state=INTERRUPTED 并 finishCompletion", invariant: "INTERRUPTED 只表示 cancel 的 interrupt 动作已完成", effect: "interrupt"},
+        {group: "取消路径", groupKey: "cancel", phase: "runner 退出窗口", action: "run finally 清 runner 并等待 INTERRUPTING 结束", invariant: "等待取消线程完成 interrupt 投递窗口", effect: "cleanup"},
+        {group: "等待清理边界", groupKey: "remove", phase: "超时或中断 get", action: "removeWaiter 清理失效节点", invariant: "移除等待节点不等于任务被取消", effect: "cleanup"},
+        {group: "语义边界", groupKey: "boundary", phase: "终态不可逆", action: "终态后 set/cancel/run 竞争均失败", invariant: "FutureTask 不从终态回到 NEW；runAndReset 是受保护特例", effect: "report"}
+    ];
+
+    const steps = [
+        {
+            title: "1) 构造 FutureTask：callable 与 NEW 发布",
+            summary: "构造函数先保存 callable，再把 volatile state 写为 NEW；后续所有完成、取消和 get 报告都围绕 state 展开",
+            focus: "方法焦点：FutureTask(Callable) / FutureTask(Runnable,V)",
+            runner: "null",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "NEW(0)",
+            waiters: "null",
+            result: "任务可被 run 或 cancel 抢占",
+            fieldFocus: ["callable", "state"],
+            flowActive: [],
+            threads: [
+                {name: "Runner", state: "IDLE", desc: "尚未执行 run()"},
+                {name: "G1 get()", state: "IDLE", desc: "尚未等待"},
+                {name: "G2 get()", state: "IDLE", desc: "尚未等待"},
+                {name: "Canceller", state: "IDLE", desc: "尚未取消"}
+            ],
+            waitersStack: [],
+            chain: [
+                "new FutureTask(callable)",
+                "this.callable = callable",
+                "this.state = NEW"
+            ],
+            micro: [
+                "state 是 volatile int，初始值 NEW=0",
+                "outcome 不是 volatile，后续依赖 state 的发布顺序保护",
+                "waiters 是等待 get() 的 Treiber 栈顶，不是 AQS 的 head/tail 队列"
+            ],
+            cas: [
+                "构造阶段没有 CAS；这里只是普通字段写和 volatile state 写"
+            ],
+            delta: [
+                "callable: null -> Callable#task",
+                "state: 0 / NEW",
+                "runner/outcome/waiters: null"
+            ],
+            next: [
+                "执行线程进入 run() 时，必须先 CAS 抢占 runner，防止多个线程同时运行同一个任务"
+            ],
+            source: [
+                "FutureTask.java: public FutureTask(Callable<V> callable)",
+                "字段：volatile int state, Callable<V> callable, Object outcome, volatile Thread runner, volatile WaitNode waiters"
+            ]
+        },
+        {
+            title: "2) run() 抢 runner：只允许一个执行者",
+            summary: "run() 先检查 state 是否仍为 NEW，再 CAS runner 从 null 改成当前线程；失败者直接 return",
+            focus: "方法焦点：run() 开头的 state 检查与 runner CAS",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "NEW(0)",
+            waiters: "null",
+            result: "Runner 获得执行权",
+            fieldFocus: ["runner", "state"],
+            flowActive: ["run_start", "runner_cas"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "CAS runner 成功，进入 try 块", active: true},
+                {name: "Second run()", state: "READY", desc: "若并发调用 run，CAS runner 失败后返回"},
+                {name: "G1 get()", state: "IDLE", desc: "尚未等待"},
+                {name: "Canceller", state: "IDLE", desc: "尚未取消"}
+            ],
+            waitersStack: [],
+            chain: [
+                "FutureTask.run()",
+                "if (state != NEW || !CAS(runner, null, currentThread)) return",
+                "try { Callable<V> c = callable; ... }"
+            ],
+            micro: [
+                "runner 必须在任务结束前保持非 null，避免另一个 run() 误入",
+                "若第二个线程同时调用 run()，即使 state 仍是 NEW，也会因 runner CAS 失败直接 return",
+                "这里不改变 state，任务仍然是 NEW",
+                "cancel(true) 后续会读取 runner 来决定是否 interrupt"
+            ],
+            cas: [
+                "CAS runner: null -> Runner 成功"
+            ],
+            delta: [
+                "runner: null -> Runner",
+                "state 保持 NEW",
+                "outcome/waiters 不变"
+            ],
+            next: [
+                "runner 抢占成功后，run() 才会读取 callable 并调用 c.call()"
+            ],
+            source: [
+                "FutureTask.java: run()",
+                "UNSAFE.compareAndSwapObject(this, runnerOffset, null, Thread.currentThread())"
+            ]
+        },
+        {
+            title: "3) callable.call() 执行中：state 仍为 NEW",
+            summary: "callable 执行业务逻辑时，FutureTask 内部还没有结果；cancel(true) 仍可能抢先把 state 改成取消态",
+            focus: "方法焦点：Callable<V> c = callable; if (c != null && state == NEW) c.call()",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "NEW(0)",
+            waiters: "null",
+            result: "任务运行中但未完成",
+            fieldFocus: ["runner", "callable", "state"],
+            flowActive: ["run_start", "runner_cas", "call"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "正在执行 Callable.call()", active: true},
+                {name: "G1 get()", state: "IDLE", desc: "下一步进入等待"},
+                {name: "G2 get()", state: "IDLE", desc: "可并发等待同一 FutureTask"},
+                {name: "Canceller", state: "READY", desc: "此时 cancel 仍可竞争 state"}
+            ],
+            waitersStack: [],
+            chain: [
+                "run()",
+                "Callable<V> c = callable",
+                "if (c != null && state == NEW)",
+                "result = c.call()"
+            ],
+            micro: [
+                "正在执行不等于 state 改变；state 仍是 NEW",
+                "runner 字段表达谁在执行，不表达完成状态",
+                "call() 如果抛异常会转入 setException；正常返回会转入 set"
+            ],
+            cas: [
+                "本步没有 CAS；call() 是用户代码执行"
+            ],
+            delta: [
+                "FutureTask 字段无变化",
+                "Runner 的调度状态为 RUNNING"
+            ],
+            next: [
+                "在 Runner 尚未完成时，G1 调用 get() 会进入 awaitDone"
+            ],
+            source: [
+                "FutureTask.java: run() 内部 c.call() 分支",
+                "注释窗口：call() 期间 cancel(true/false) 可能先赢 state"
+            ]
+        },
+        {
+            title: "4) G1 调用 get()：进入 awaitDone",
+            summary: "get() 读取 volatile state，发现 s<=COMPLETING，于是进入 awaitDone(false,0) 等待最终态",
+            focus: "方法焦点：get() -> awaitDone(false, 0L)",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "NEW(0)",
+            waiters: "null",
+            result: "G1 准备阻塞等待",
+            fieldFocus: ["state", "waiters"],
+            flowActive: ["get", "await"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "call() 仍在执行"},
+                {name: "G1 get()", state: "RUNNING", desc: "读到 NEW，进入 awaitDone", active: true},
+                {name: "G2 get()", state: "IDLE", desc: "尚未等待"},
+                {name: "Canceller", state: "IDLE", desc: "尚未取消"}
+            ],
+            waitersStack: [],
+            chain: [
+                "FutureTask.get()",
+                "int s = state",
+                "if (s <= COMPLETING) s = awaitDone(false, 0L)"
+            ],
+            micro: [
+                "NEW 和 COMPLETING 都不能 report，因为 outcome 还未安全发布",
+                "awaitDone 是自旋、入栈、park、超时和中断检查的统一循环",
+                "get() 本身不改变任务状态"
+            ],
+            cas: [
+                "本步没有 CAS；只是读 volatile state 并进入等待循环"
+            ],
+            delta: [
+                "FutureTask 字段无变化",
+                "G1 从调用 get() 进入 awaitDone 循环"
+            ],
+            next: [
+                "awaitDone 第一次循环会创建 G1 的 WaitNode"
+            ],
+            source: [
+                "FutureTask.java: public V get()",
+                "FutureTask.java: private int awaitDone(boolean timed, long nanos)"
+            ]
+        },
+        {
+            title: "5) awaitDone 创建 WaitNode：节点尚未入栈",
+            summary: "G1 还没有排到 waiters 上，只是在本地创建 WaitNode，thread 字段保存当前线程",
+            focus: "方法焦点：else if (q == null) q = new WaitNode()",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "NEW(0)",
+            waiters: "null",
+            result: "G1 拥有本地节点 q",
+            fieldFocus: ["waiters"],
+            flowActive: ["get", "await", "node"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "call() 仍在执行"},
+                {name: "G1 get()", state: "RUNNING", desc: "创建 WaitNode(thread=G1)", active: true},
+                {name: "G2 get()", state: "IDLE", desc: "尚未等待"},
+                {name: "Canceller", state: "IDLE", desc: "尚未取消"}
+            ],
+            waitersStack: [],
+            chain: [
+                "awaitDone(false, 0)",
+                "if (Thread.interrupted()) ...",
+                "int s = state",
+                "else if (q == null) q = new WaitNode()"
+            ],
+            micro: [
+                "WaitNode 构造函数只做 thread = Thread.currentThread()",
+                "此时 waiters 仍为 null，finishCompletion 还看不到 G1",
+                "queued 标记仍是 false，下一轮才尝试 CAS 入栈"
+            ],
+            cas: [
+                "本步没有 CAS；节点仅在 G1 栈帧里"
+            ],
+            delta: [
+                "本地变量 q: null -> WaitNode(G1)",
+                "waiters 字段仍为 null"
+            ],
+            next: [
+                "下一轮 awaitDone 会把 q.next 指向旧 waiters，并 CAS 设为新栈顶"
+            ],
+            source: [
+                "FutureTask.java: static final class WaitNode",
+                "FutureTask.java: awaitDone q == null 分支"
+            ]
+        },
+        {
+            title: "6) G1 入 waiters 栈：CAS 头插成功",
+            summary: "G1 的节点用 Treiber 栈方式入栈：q.next=旧 waiters，然后 CAS waiters 从旧栈顶改为 q",
+            focus: "方法焦点：queued = CAS(waiters, q.next = waiters, q)",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "NEW(0)",
+            waiters: "G1",
+            result: "G1 成为 waiters 栈顶",
+            fieldFocus: ["waiters"],
+            flowActive: ["get", "await", "node", "push"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "call() 仍在执行"},
+                {name: "G1 get()", state: "RUNNING", desc: "已入 waiters，下一轮 park", active: true},
+                {name: "G2 get()", state: "IDLE", desc: "尚未等待"},
+                {name: "Canceller", state: "IDLE", desc: "尚未取消"}
+            ],
+            waitersStack: [
+                {id: "N1", role: "TOP", thread: "G1", threadState: "RUNNING", next: "null", active: true}
+            ],
+            chain: [
+                "awaitDone(false, 0)",
+                "else if (!queued)",
+                "q.next = waiters",
+                "CAS(waiters, old, q)"
+            ],
+            micro: [
+                "waiters 是栈顶指针，入栈是头插，不维护 prev",
+                "CAS 成功后 queued=true，G1 节点才正式可被 finishCompletion 找到",
+                "这不是 FIFO 队列；唤醒顺序按当前栈链遍历"
+            ],
+            cas: [
+                "CAS waiters: null -> N1(G1) 成功"
+            ],
+            delta: [
+                "N1.next = null",
+                "waiters: null -> N1"
+            ],
+            next: [
+                "G1 已排入等待栈，下一轮循环会执行 LockSupport.park(this)"
+            ],
+            source: [
+                "FutureTask.java: awaitDone !queued 分支",
+                "字段：volatile WaitNode waiters"
+            ]
+        },
+        {
+            title: "7) G2 也 get()：新节点压到栈顶",
+            summary: "第二个 get 线程重复创建节点和 CAS 入栈，新节点 N2.next 指向旧栈顶 N1",
+            focus: "方法焦点：Treiber 栈头插，waiters=N2 -> N1",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "NEW(0)",
+            waiters: "G2 -> G1",
+            result: "两个 get 线程都在 waiters 中",
+            fieldFocus: ["waiters"],
+            flowActive: ["get", "await", "node", "push"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "call() 仍在执行"},
+                {name: "G1 get()", state: "READY", desc: "已经在 waiters 中"},
+                {name: "G2 get()", state: "RUNNING", desc: "CAS 入栈成为新栈顶", active: true},
+                {name: "Canceller", state: "IDLE", desc: "尚未取消"}
+            ],
+            waitersStack: [
+                {id: "N2", role: "TOP", thread: "G2", threadState: "RUNNING", next: "N1", active: true},
+                {id: "N1", role: "NEXT", thread: "G1", threadState: "READY", next: "null"}
+            ],
+            chain: [
+                "G2.get()",
+                "awaitDone(false, 0)",
+                "new WaitNode(thread=G2)",
+                "CAS(waiters, N1, N2)"
+            ],
+            micro: [
+                "N2.next 保存 CAS 时看到的旧栈顶 N1",
+                "如果 CAS 失败，会在循环里重读 waiters 并重试",
+                "这里仍然没有任何 AQS waitStatus，也没有 head/tail"
+            ],
+            cas: [
+                "CAS waiters: N1 -> N2 成功"
+            ],
+            delta: [
+                "N2.next = N1",
+                "waiters: N1 -> N2"
+            ],
+            next: [
+                "两个等待者都 queued 后，会进入 park 等待任务完成或取消"
+            ],
+            source: [
+                "FutureTask.java: awaitDone !queued 分支",
+                "WaitNode 字段：volatile Thread thread, volatile WaitNode next"
+            ]
+        },
+        {
+            title: "8) park 等待：调度状态改变，FutureTask 字段不变",
+            summary: "queued=true 后，get 线程调用 LockSupport.park(this) 阻塞；park 不修改 state、outcome 或 waiters 链",
+            focus: "方法焦点：else LockSupport.park(this)",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "NEW(0)",
+            waiters: "G2 -> G1",
+            result: "G1/G2 PARKED",
+            fieldFocus: ["waiters"],
+            flowActive: ["get", "await", "node", "push", "park"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "call() 继续执行"},
+                {name: "G1 get()", state: "PARKED", desc: "park(this)，等待 unpark"},
+                {name: "G2 get()", state: "PARKED", desc: "park(this)，等待 unpark", active: true},
+                {name: "Canceller", state: "IDLE", desc: "尚未取消"}
+            ],
+            waitersStack: [
+                {id: "N2", role: "TOP", thread: "G2", threadState: "PARKED", next: "N1", active: true},
+                {id: "N1", role: "NEXT", thread: "G1", threadState: "PARKED", next: "null"}
+            ],
+            chain: [
+                "awaitDone(false, 0)",
+                "queued == true",
+                "timed == false",
+                "LockSupport.park(this)"
+            ],
+            micro: [
+                "park 只影响线程调度许可，不改变 WaitNode.next",
+                "被 unpark 后，线程回到 awaitDone 循环重新读取 state",
+                "中断也可以让 park 返回，返回后先走 Thread.interrupted() 分支"
+            ],
+            cas: [
+                "本步无 CAS；入栈已经完成"
+            ],
+            delta: [
+                "FutureTask 字段无变化",
+                "G1/G2 调度状态: READY/RUNNING -> PARKED"
+            ],
+            next: [
+                "Runner 的 callable 正常返回后，会进入 set(result) 发布结果"
+            ],
+            source: [
+                "FutureTask.java: awaitDone timed/untimed park 分支",
+                "LockSupport.park(this)"
+            ]
+        },
+        {
+            title: "9) callable 返回 result：还不能直接交给 get()",
+            summary: "call() 正常返回只是在 run() 的局部变量里得到 result；必须经过 set(result) 的完成权 CAS 才能写 outcome",
+            focus: "方法焦点：result = c.call(); ran = true; if (ran) set(result)",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "NEW(0)",
+            waiters: "G2 -> G1",
+            result: "局部 result=42，尚未发布",
+            fieldFocus: ["runner", "outcome", "state"],
+            flowActive: ["run_start", "runner_cas", "call", "set"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "call() 返回，准备 set(result)", active: true},
+                {name: "G1 get()", state: "PARKED", desc: "仍在 waiters 中"},
+                {name: "G2 get()", state: "PARKED", desc: "仍在 waiters 栈顶"},
+                {name: "Canceller", state: "READY", desc: "此刻仍可能竞争 cancel"}
+            ],
+            waitersStack: [
+                {id: "N2", role: "TOP", thread: "G2", threadState: "PARKED", next: "N1"},
+                {id: "N1", role: "NEXT", thread: "G1", threadState: "PARKED", next: "null"}
+            ],
+            chain: [
+                "run()",
+                "result = c.call()",
+                "ran = true",
+                "if (ran) set(result)"
+            ],
+            micro: [
+                "result 还只是 Runner 的局部变量，不是 FutureTask.outcome",
+                "如果 cancel 在 set CAS 前先赢，set(result) 将不能写 outcome",
+                "FutureTask 的完成语义由 state CAS 决定，不由 call() 返回本身决定"
+            ],
+            cas: [
+                "本步还未执行 state CAS"
+            ],
+            delta: [
+                "FutureTask 字段无变化",
+                "Runner 局部变量 result = 42"
+            ],
+            next: [
+                "set(result) 首先尝试 CAS state: NEW -> COMPLETING，抢完成权"
+            ],
+            source: [
+                "FutureTask.java: run() 正常返回分支",
+                "FutureTask.java: protected void set(V v)"
+            ]
+        },
+        {
+            title: "10) set() CAS 到 COMPLETING：完成权被 Runner 拿到",
+            summary: "CAS NEW->COMPLETING 成功后，只有 Runner 可以写 outcome；get 线程即使醒来看到 COMPLETING 也只能 yield",
+            focus: "方法焦点：UNSAFE.compareAndSwapInt(state, NEW, COMPLETING)",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "COMPLETING(1)",
+            waiters: "G2 -> G1",
+            result: "完成权已确定，结果未发布",
+            fieldFocus: ["state", "outcome"],
+            flowActive: ["run_start", "runner_cas", "call", "set"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "CAS 到 COMPLETING 成功", active: true},
+                {name: "G1 get()", state: "PARKED", desc: "若醒来看到 COMPLETING 只能 yield"},
+                {name: "G2 get()", state: "PARKED", desc: "若醒来看到 COMPLETING 不能 report"},
+                {name: "Canceller", state: "READY", desc: "cancel CAS NEW 已经会失败"}
+            ],
+            waitersStack: [
+                {id: "N2", role: "TOP", thread: "G2", threadState: "PARKED", next: "N1"},
+                {id: "N1", role: "NEXT", thread: "G1", threadState: "PARKED", next: "null"}
+            ],
+            chain: [
+                "set(result)",
+                "CAS state: NEW -> COMPLETING",
+                "if (CAS 成功) { outcome = v; ... }"
+            ],
+            micro: [
+                "COMPLETING 不是任务正在运行，而是正在发布完成结果",
+                "它把抢完成权和发布 outcome 拆成两个阶段",
+                "awaitDone 看到 s == COMPLETING 会 Thread.yield()，不会读取 outcome"
+            ],
+            cas: [
+                "CAS state: NEW(0) -> COMPLETING(1) 成功"
+            ],
+            delta: [
+                "state: NEW -> COMPLETING",
+                "outcome 仍为 null",
+                "waiters 栈不变"
+            ],
+            next: [
+                "完成权拿到后，Runner 才能把 result 写入 outcome"
+            ],
+            source: [
+                "FutureTask.java: set(V v)",
+                "FutureTask.java: awaitDone s == COMPLETING 分支"
+            ]
+        },
+        {
+            title: "11) 写 outcome：结果仍隔着 COMPLETING",
+            summary: "Runner 写 outcome=result，但 state 还没有进入 NORMAL；读者必须等最终态，不能把 COMPLETING 当作可读取结果",
+            focus: "方法焦点：outcome = v",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "42",
+            state: "COMPLETING(1)",
+            waiters: "G2 -> G1",
+            result: "outcome 已写，尚未最终发布",
+            fieldFocus: ["outcome", "state"],
+            flowActive: ["run_start", "runner_cas", "call", "set"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "正在写 outcome", active: true},
+                {name: "G1 get()", state: "PARKED", desc: "不能读取 COMPLETING 下的 outcome"},
+                {name: "G2 get()", state: "PARKED", desc: "不能读取 COMPLETING 下的 outcome"},
+                {name: "Canceller", state: "READY", desc: "cancel 已无法成功"}
+            ],
+            waitersStack: [
+                {id: "N2", role: "TOP", thread: "G2", threadState: "PARKED", next: "N1"},
+                {id: "N1", role: "NEXT", thread: "G1", threadState: "PARKED", next: "null"}
+            ],
+            chain: [
+                "set(result)",
+                "CAS NEW -> COMPLETING 成功",
+                "outcome = v"
+            ],
+            micro: [
+                "outcome 是普通 Object 字段，不靠自身 volatile 保证可见",
+                "后续 putOrderedInt 写最终 state，配合 volatile 读 state 建立读取时机",
+                "如果直接先写最终态再写 outcome，get 可能读到未写完的结果"
+            ],
+            cas: [
+                "本步无 CAS；完成权已经由上一步拿到"
+            ],
+            delta: [
+                "outcome: null -> 42",
+                "state 保持 COMPLETING"
+            ],
+            next: [
+                "Runner 用 ordered/lazy 写把 state 推到 NORMAL，最终发布结果"
+            ],
+            source: [
+                "FutureTask.java: outcome = v",
+                "注释：outcome non-volatile, protected by state reads/writes"
+            ]
+        },
+        {
+            title: "12) 发布 NORMAL：get 才能 report",
+            summary: "putOrderedInt 把 state 写成 NORMAL；从这一刻开始，awaitDone 看到 state>COMPLETING 后可以返回并进入 report",
+            focus: "方法焦点：UNSAFE.putOrderedInt(this, stateOffset, NORMAL)",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "42",
+            state: "NORMAL(2)",
+            waiters: "G2 -> G1",
+            result: "正常结果已发布",
+            fieldFocus: ["state", "outcome", "result"],
+            flowActive: ["run_start", "runner_cas", "call", "set"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "发布 NORMAL 后准备 finishCompletion", active: true},
+                {name: "G1 get()", state: "PARKED", desc: "等待 unpark 后读取 NORMAL"},
+                {name: "G2 get()", state: "PARKED", desc: "等待 unpark 后读取 NORMAL"},
+                {name: "Canceller", state: "READY", desc: "cancel 返回 false"}
+            ],
+            waitersStack: [
+                {id: "N2", role: "TOP", thread: "G2", threadState: "PARKED", next: "N1"},
+                {id: "N1", role: "NEXT", thread: "G1", threadState: "PARKED", next: "null"}
+            ],
+            chain: [
+                "set(result)",
+                "outcome = v",
+                "UNSAFE.putOrderedInt(state, NORMAL)"
+            ],
+            micro: [
+                "NORMAL 是最终态，state 不会再回到 NEW",
+                "awaitDone 的 s > COMPLETING 条件现在成立",
+                "此刻 waiters 栈仍挂在字段上，下一步才进入 finishCompletion 摘栈"
+            ],
+            cas: [
+                "本步是 ordered write，不是 CAS",
+                "state final write: COMPLETING -> NORMAL"
+            ],
+            delta: [
+                "state: COMPLETING -> NORMAL",
+                "outcome 保持 42"
+            ],
+            next: [
+                "状态终态发布后，finishCompletion 可以摘下 waiters 栈并唤醒等待者"
+            ],
+            source: [
+                "FutureTask.java: set(V v)",
+                "UNSAFE.putOrderedInt(this, stateOffset, NORMAL)"
+            ]
+        },
+        {
+            title: "13) finishCompletion 摘栈：waiters 一次性置空",
+            summary: "finishCompletion 先 CAS waiters 从当前栈顶改为 null，避免后续重复处理同一批等待节点",
+            focus: "方法焦点：CAS(waiters, q, null)",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "42",
+            state: "NORMAL(2)",
+            waiters: "null（本地 q=N2->N1）",
+            result: "等待栈已从字段摘下",
+            fieldFocus: ["waiters"],
+            flowActive: ["run_start", "runner_cas", "call", "set", "finish"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "正在 finishCompletion", active: true},
+                {name: "G1 get()", state: "PARKED", desc: "节点已被 Runner 本地遍历"},
+                {name: "G2 get()", state: "PARKED", desc: "节点已被 Runner 本地遍历"},
+                {name: "Canceller", state: "IDLE", desc: "不再影响结果"}
+            ],
+            waitersStack: [
+                {id: "N2", role: "DETACHED", thread: "G2", threadState: "PARKED", next: "N1", active: true},
+                {id: "N1", role: "DETACHED", thread: "G1", threadState: "PARKED", next: "null"}
+            ],
+            chain: [
+                "finishCompletion()",
+                "for (WaitNode q; (q = waiters) != null; )",
+                "CAS(waiters, q, null)",
+                "开始遍历本地 q 链"
+            ],
+            micro: [
+                "字段 waiters 已变为 null，但 Runner 局部变量 q 仍握着旧链",
+                "之后新来的 get() 会先看到 NORMAL，不会再入栈",
+                "摘栈和逐个 unpark 分开，减少字段竞争"
+            ],
+            cas: [
+                "CAS waiters: N2 -> null 成功"
+            ],
+            delta: [
+                "waiters: N2 -> null",
+                "本地 q: N2 -> N1"
+            ],
+            next: [
+                "Runner 遍历本地 q 链，依次清 thread、unpark，并断开 next 帮助 GC"
+            ],
+            source: [
+                "FutureTask.java: private void finishCompletion()",
+                "UNSAFE.compareAndSwapObject(this, waitersOffset, q, null)"
+            ]
+        },
+        {
+            title: "14) unpark 等待者：done() 与 callable 清理",
+            summary: "finishCompletion 逐个 unpark 等待线程，断开节点 next，然后调用 done()，最后把 callable 置空减少占用",
+            focus: "方法焦点：LockSupport.unpark(t) -> done() -> callable=null",
+            runner: "Runner",
+            callable: "null",
+            outcome: "42",
+            state: "NORMAL(2)",
+            waiters: "null",
+            result: "等待者被唤醒，callable 已释放",
+            fieldFocus: ["waiters", "callable", "result"],
+            flowActive: ["run_start", "runner_cas", "call", "set", "finish", "done", "park"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "unpark 后执行 done() 并清 callable", active: true},
+                {name: "G1 get()", state: "READY", desc: "被 unpark，准备重读 state"},
+                {name: "G2 get()", state: "READY", desc: "被 unpark，准备重读 state"},
+                {name: "Canceller", state: "IDLE", desc: "不再影响结果"}
+            ],
+            waitersStack: [
+                {id: "N2", role: "CLEARED", thread: "null", threadState: "READY", next: "null", cleared: true},
+                {id: "N1", role: "CLEARED", thread: "null", threadState: "READY", next: "null", cleared: true}
+            ],
+            chain: [
+                "finishCompletion()",
+                "q.thread = null",
+                "LockSupport.unpark(t)",
+                "q.next = null",
+                "done()",
+                "callable = null"
+            ],
+            micro: [
+                "unpark 只是给等待线程一个继续运行的许可，不把结果塞给线程",
+                "done() 是 protected 钩子，默认空实现",
+                "callable=null 是完成后的 footprint 清理，不影响 outcome"
+            ],
+            cas: [
+                "本步无 CAS；waiters 字段已经在上一步摘下"
+            ],
+            delta: [
+                "N2.thread / N1.thread: G2/G1 -> null",
+                "N2.next / N1.next: 断开",
+                "callable: Callable#task -> null"
+            ],
+            next: [
+                "G1/G2 从 park 返回，回到 awaitDone 循环并看到 NORMAL"
+            ],
+            source: [
+                "FutureTask.java: finishCompletion()",
+                "LockSupport.unpark(t); done(); callable = null"
+            ]
+        },
+        {
+            title: "15) get 醒来 report：NORMAL 返回 outcome",
+            summary: "等待线程醒来后重新读 state，看到 NORMAL 后清自己的 q.thread 并返回 state，report(NORMAL) 读取 outcome 返回",
+            focus: "方法焦点：awaitDone s>COMPLETING -> report(NORMAL)",
+            runner: "null",
+            callable: "null",
+            outcome: "42",
+            state: "NORMAL(2)",
+            waiters: "null",
+            result: "G1/G2 get() 返回 42",
+            fieldFocus: ["runner", "outcome", "state", "result"],
+            flowActive: ["get", "await", "report"],
+            threads: [
+                {name: "Runner", state: "IDLE", desc: "run finally 清 runner 后结束"},
+                {name: "G1 get()", state: "RUNNING", desc: "report(NORMAL) 返回 42", active: true},
+                {name: "G2 get()", state: "READY", desc: "同样会返回 42"},
+                {name: "Canceller", state: "IDLE", desc: "cancel 已无效"}
+            ],
+            waitersStack: [],
+            chain: [
+                "awaitDone(false, 0)",
+                "int s = state",
+                "if (s > COMPLETING) return s",
+                "get() -> report(s)",
+                "if (s == NORMAL) return (V) outcome"
+            ],
+            micro: [
+                "report 只在终态之后读取 outcome",
+                "NORMAL 返回结果；EXCEPTIONAL 和取消态走不同异常路径",
+                "run finally 中 runner=null，任务执行者身份被清理"
+            ],
+            cas: [
+                "本步无 CAS；只读取已发布的终态和 outcome"
+            ],
+            delta: [
+                "runner: Runner -> null",
+                "等待线程从 PARKED/READY -> RUNNING",
+                "FutureTask 结果保持 NORMAL/outcome=42"
+            ],
+            next: [
+                "正常主路径闭环完成；接着单独看异常完成如何写 outcome 并 report"
+            ],
+            source: [
+                "FutureTask.java: awaitDone s > COMPLETING 分支",
+                "FutureTask.java: private V report(int s)"
+            ]
+        },
+        {
+            title: "16) call() 抛异常：进入 setException",
+            summary: "Runner 捕获 Throwable，把 result 置 null、ran=false，然后调用 setException(ex) 尝试发布异常终态",
+            focus: "方法焦点：catch(Throwable ex) -> setException(ex)",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "COMPLETING(1)",
+            waiters: "G1",
+            result: "异常完成权已被 Runner 拿到",
+            fieldFocus: ["state", "outcome", "result"],
+            flowActive: ["run_start", "runner_cas", "call", "set"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "捕获 ex，进入 setException", active: true},
+                {name: "G1 get()", state: "PARKED", desc: "等待异常终态"},
+                {name: "G2 get()", state: "IDLE", desc: "未参与此分支"},
+                {name: "Canceller", state: "READY", desc: "CAS NEW 已无法成功"}
+            ],
+            waitersStack: [
+                {id: "N1", role: "TOP", thread: "G1", threadState: "PARKED", next: "null"}
+            ],
+            chain: [
+                "run()",
+                "catch (Throwable ex)",
+                "ran = false",
+                "setException(ex)",
+                "CAS state: NEW -> COMPLETING"
+            ],
+            micro: [
+                "异常不会直接从 Runner 的 run() 逃给 get 调用者",
+                "setException 与 set 的发布框架相同：先抢完成权，再写 outcome，再写终态",
+                "如果 cancel 已经赢了 NEW，setException 不会写 outcome"
+            ],
+            cas: [
+                "CAS state: NEW -> COMPLETING 成功"
+            ],
+            delta: [
+                "state: NEW -> COMPLETING",
+                "outcome 暂时仍为 null"
+            ],
+            next: [
+                "Runner 把 Throwable 写入 outcome，再发布 EXCEPTIONAL"
+            ],
+            source: [
+                "FutureTask.java: run() catch(Throwable ex)",
+                "FutureTask.java: protected void setException(Throwable t)"
+            ]
+        },
+        {
+            title: "17) EXCEPTIONAL 终态：get 抛 ExecutionException",
+            summary: "setException 写 outcome=Throwable，再 ordered 写 EXCEPTIONAL；get 最终在 report 中抛 ExecutionException(outcome)",
+            focus: "方法焦点：outcome=t -> putOrderedInt(EXCEPTIONAL) -> report",
+            runner: "null",
+            callable: "null",
+            outcome: "Throwable ex",
+            state: "EXCEPTIONAL(3)",
+            waiters: "null",
+            result: "get() 抛 ExecutionException(ex)",
+            fieldFocus: ["outcome", "state", "result"],
+            flowActive: ["run_start", "runner_cas", "call", "set", "finish", "report"],
+            threads: [
+                {name: "Runner", state: "IDLE", desc: "异常已记录并完成"},
+                {name: "G1 get()", state: "EXCEPTION", desc: "report 抛 ExecutionException", active: true},
+                {name: "G2 get()", state: "IDLE", desc: "未参与此分支"},
+                {name: "Canceller", state: "IDLE", desc: "cancel 返回 false"}
+            ],
+            waitersStack: [],
+            chain: [
+                "setException(ex)",
+                "outcome = ex",
+                "putOrderedInt(state, EXCEPTIONAL)",
+                "finishCompletion()",
+                "run() finally: runner = null",
+                "report(EXCEPTIONAL)"
+            ],
+            micro: [
+                "EXCEPTIONAL 是终态，isDone() 返回 true",
+                "finishCompletion 先 CAS 摘下 waiters，再 unpark G1，随后 done() 并清 callable",
+                "report 中 s>=CANCELLED 不成立，最后抛 ExecutionException((Throwable) outcome)",
+                "只要不调用 get，业务异常不会在调用方线程重新抛出"
+            ],
+            cas: [
+                "发布终态使用 ordered write：COMPLETING -> EXCEPTIONAL",
+                "CAS waiters: N1 -> null 成功"
+            ],
+            delta: [
+                "outcome: null -> Throwable ex",
+                "state: COMPLETING -> EXCEPTIONAL",
+                "waiters: N1 -> null，并 unpark G1",
+                "runner: Runner -> null",
+                "callable: Callable#task -> null"
+            ],
+            next: [
+                "异常分支闭环完成；接着看 cancel(false) 在任务未运行时如何直接到 CANCELLED"
+            ],
+            source: [
+                "FutureTask.java: setException(Throwable t)",
+                "FutureTask.java: report(int s)"
+            ]
+        },
+        {
+            title: "18) cancel(false)：未运行任务直接 CANCELLED",
+            summary: "任务还在 NEW 且 runner 为 null 时，cancel(false) 把 state CAS 到 CANCELLED，不发 interrupt，也不写 outcome",
+            focus: "方法焦点：cancel(false) -> CAS NEW->CANCELLED",
+            runner: "null",
+            callable: "null",
+            outcome: "null",
+            state: "CANCELLED(4)",
+            waiters: "null",
+            result: "取消成功；后续 run() 直接 return",
+            fieldFocus: ["state", "callable", "result"],
+            flowActive: ["cancel", "cancel_cas", "cancel_finish"],
+            threads: [
+                {name: "Runner", state: "READY", desc: "后续 run() 看到 state!=NEW 返回"},
+                {name: "G1 get()", state: "IDLE", desc: "未参与；后续 get 会抛 CancellationException"},
+                {name: "G2 get()", state: "IDLE", desc: "未参与"},
+                {name: "Canceller", state: "RUNNING", desc: "cancel(false) 成功", active: true}
+            ],
+            waitersStack: [],
+            chain: [
+                "cancel(false)",
+                "state == NEW",
+                "CAS state: NEW -> CANCELLED",
+                "finishCompletion()",
+                "return true"
+            ],
+            micro: [
+                "cancel(false) 不读取 runner，也不调用 Thread.interrupt()",
+                "如果 cancel(false) 发生在 callable 正运行时，也可先把 NEW 改成 CANCELLED；callable 可继续跑，但后续 set/setException 会因 state 不再是 NEW 而失败",
+                "CANCELLED 是终态，outcome 保持 null",
+                "finishCompletion 仍会唤醒已有 get 等待者，并清 callable"
+            ],
+            cas: [
+                "CAS state: NEW -> CANCELLED 成功"
+            ],
+            delta: [
+                "state: NEW -> CANCELLED",
+                "callable: Callable#task -> null",
+                "outcome 保持 null"
+            ],
+            next: [
+                "如果任务已经在运行且 mayInterruptIfRunning=true，cancel 会先进入 INTERRUPTING 窗口"
+            ],
+            source: [
+                "FutureTask.java: public boolean cancel(boolean mayInterruptIfRunning)",
+                "FutureTask.java: report s >= CANCELLED 分支"
+            ]
+        },
+        {
+            title: "19) cancel(true)：先进入 INTERRUPTING",
+            summary: "运行中的任务仍处于 NEW，cancel(true) 成功 CAS 到 INTERRUPTING；此时取消线程拥有取消完成权，但 interrupt 还没做完",
+            focus: "方法焦点：CAS state: NEW -> INTERRUPTING",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "INTERRUPTING(5)",
+            waiters: "G1",
+            result: "取消线程进入中断窗口",
+            fieldFocus: ["state", "runner", "result"],
+            flowActive: ["cancel", "cancel_cas", "interrupting"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "call() 仍在执行，可能稍后感知中断"},
+                {name: "G1 get()", state: "PARKED", desc: "等待取消终态"},
+                {name: "G2 get()", state: "IDLE", desc: "未参与此分支"},
+                {name: "Canceller", state: "RUNNING", desc: "CAS 到 INTERRUPTING", active: true}
+            ],
+            waitersStack: [
+                {id: "N1", role: "TOP", thread: "G1", threadState: "PARKED", next: "null"}
+            ],
+            chain: [
+                "cancel(true)",
+                "state == NEW",
+                "CAS state: NEW -> INTERRUPTING",
+                "try { Thread t = runner; ... }"
+            ],
+            micro: [
+                "INTERRUPTING 是 cancel(true) 独有的中间态",
+                "它表示取消线程已经赢了 state，但 runner.interrupt() 还在窗口内",
+                "Runner 后续 set(result) 或 setException(ex) 的 CAS NEW->COMPLETING 会失败"
+            ],
+            cas: [
+                "CAS state: NEW -> INTERRUPTING 成功"
+            ],
+            delta: [
+                "state: NEW -> INTERRUPTING",
+                "runner 仍为 Runner",
+                "outcome 保持 null"
+            ],
+            next: [
+                "取消线程读取 runner，并尝试调用 runner.interrupt()"
+            ],
+            source: [
+                "FutureTask.java: cancel(true)",
+                "状态转换：NEW -> INTERRUPTING -> INTERRUPTED"
+            ]
+        },
+        {
+            title: "20) interrupt(runner)：只发送中断信号",
+            summary: "cancel(true) 读取 runner 并调用 interrupt；中断是否让 callable 停下取决于用户代码是否响应中断",
+            focus: "方法焦点：Thread t = runner; if (t != null) t.interrupt()",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "INTERRUPTING(5)",
+            waiters: "G1",
+            result: "中断信号已发出或正在发出",
+            fieldFocus: ["runner", "state"],
+            flowActive: ["cancel", "cancel_cas", "interrupting", "interrupt"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "收到 interrupt 信号，但是否停止取决于 call()", active: true},
+                {name: "G1 get()", state: "PARKED", desc: "仍等待终态和 unpark"},
+                {name: "G2 get()", state: "IDLE", desc: "未参与此分支"},
+                {name: "Canceller", state: "RUNNING", desc: "正在执行 interrupt(runner)", active: true}
+            ],
+            waitersStack: [
+                {id: "N1", role: "TOP", thread: "G1", threadState: "PARKED", next: "null"}
+            ],
+            chain: [
+                "cancel(true)",
+                "Thread t = runner",
+                "if (t != null) t.interrupt()",
+                "finally { putOrderedInt(INTERRUPTED) }"
+            ],
+            micro: [
+                "interrupt 不直接修改 outcome、waiters 或 callable",
+                "FutureTask 不保证用户代码立刻停止，只保证取消状态进入终态",
+                "get/report 只按 state 区间判断；如果读到 INTERRUPTING，也会按 s>=CANCELLED 抛 CancellationException"
+            ],
+            cas: [
+                "本步无 CAS；CAS 在进入 INTERRUPTING 时已经完成"
+            ],
+            delta: [
+                "FutureTask 字段暂时不变",
+                "Runner 线程的 interrupt 标记可能被设置"
+            ],
+            next: [
+                "无论 interrupt 是否抛出异常，finally 都会把 state ordered 写成 INTERRUPTED"
+            ],
+            source: [
+                "FutureTask.java: cancel(true) 内部 t.interrupt()",
+                "Thread.interrupt() 是线程信号，不是 FutureTask 字段写"
+            ]
+        },
+        {
+            title: "21) INTERRUPTED：取消中断动作完成",
+            summary: "cancel(true) 的 finally 把 state 写为 INTERRUPTED，然后 finishCompletion 唤醒等待者；这不代表用户代码已经处理完中断",
+            focus: "方法焦点：putOrderedInt(state, INTERRUPTED) -> finishCompletion",
+            runner: "Runner",
+            callable: "null",
+            outcome: "null",
+            state: "INTERRUPTED(6)",
+            waiters: "null",
+            result: "get() 将抛 CancellationException",
+            fieldFocus: ["state", "waiters", "callable", "result"],
+            flowActive: ["cancel", "cancel_cas", "interrupting", "interrupt", "interrupted", "cancel_finish"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "可能仍在从 call() 退出"},
+                {name: "G1 get()", state: "READY", desc: "被 unpark，report 后抛 CancellationException", active: true},
+                {name: "G2 get()", state: "IDLE", desc: "未参与此分支"},
+                {name: "Canceller", state: "RUNNING", desc: "发布 INTERRUPTED 并 finishCompletion", active: true}
+            ],
+            waitersStack: [],
+            chain: [
+                "cancel(true)",
+                "finally { putOrderedInt(state, INTERRUPTED) }",
+                "finally { finishCompletion() }"
+            ],
+            micro: [
+                "INTERRUPTED 表示 cancel(true) 的 interrupt(runner) 动作已经完成",
+                "finishCompletion 先 CAS 摘下 waiters，再 unpark G1，随后 done() 并清 callable",
+                "它不表达 callable 是否已经响应中断，也不表达业务清理是否完成",
+                "report 对 CANCELLED、INTERRUPTING 和 INTERRUPTED 都抛 CancellationException"
+            ],
+            cas: [
+                "终态发布使用 ordered write：INTERRUPTING -> INTERRUPTED",
+                "CAS waiters: N1 -> null 成功"
+            ],
+            delta: [
+                "state: INTERRUPTING -> INTERRUPTED",
+                "waiters: N1 -> null，并 unpark G1",
+                "callable: Callable#task -> null"
+            ],
+            next: [
+                "Runner 在 finally 里清 runner 后，会检查是否需要等待 INTERRUPTING 窗口结束"
+            ],
+            source: [
+                "FutureTask.java: cancel(true) finally",
+                "FutureTask.java: report s >= CANCELLED 分支"
+            ]
+        },
+        {
+            title: "22) run finally：等待 INTERRUPTING 窗口关闭",
+            summary: "Runner 退出 run() 前先 runner=null，再重读 state；若看到 INTERRUPTING，就 yield 到取消线程写完 INTERRUPTED",
+            focus: "方法焦点：runner=null -> handlePossibleCancellationInterrupt(s)",
+            runner: "null",
+            callable: "null",
+            outcome: "null",
+            state: "INTERRUPTED(6)",
+            waiters: "null",
+            result: "Runner 等过 interrupt 投递窗口后退出",
+            fieldFocus: ["runner", "state", "result"],
+            flowActive: ["run_start", "runner_cas", "call", "interrupting", "interrupted"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "finally 清 runner，并确认 state 已越过 INTERRUPTING", active: true},
+                {name: "G1 get()", state: "EXCEPTION", desc: "CancellationException 已确定"},
+                {name: "G2 get()", state: "IDLE", desc: "未参与此分支"},
+                {name: "Canceller", state: "IDLE", desc: "cancel(true) 已返回 true"}
+            ],
+            waitersStack: [],
+            chain: [
+                "run() finally",
+                "runner = null",
+                "int s = state",
+                "if (s >= INTERRUPTING) handlePossibleCancellationInterrupt(s)",
+                "while (state == INTERRUPTING) Thread.yield()"
+            ],
+            micro: [
+                "runner 在 run 执行期间保持非 null；finally 先清 runner，再重读 state",
+                "清 runner 时 state 可能仍是 INTERRUPTING，因此必须重读并等待窗口关闭",
+                "等待 INTERRUPTING 结束是为了避免取消线程延迟到 run 返回后才投递 interrupt",
+                "FutureTask 不清除已设置的 interrupt 标记，源码中的 Thread.interrupted() 调用是注释掉的"
+            ],
+            cas: [
+                "本步无 CAS；runner 是普通 volatile 写，state 是 volatile 读"
+            ],
+            delta: [
+                "runner: Runner -> null",
+                "state 已稳定为 INTERRUPTED",
+                "outcome 保持 null"
+            ],
+            next: [
+                "取消路径闭环完成；接着看等待线程自己超时或被中断时如何清理 WaitNode"
+            ],
+            source: [
+                "FutureTask.java: run() finally",
+                "FutureTask.java: handlePossibleCancellationInterrupt(int s)"
+            ]
+        },
+        {
+            title: "23) removeWaiter：超时或中断只清等待节点",
+            summary: "get(timeout) 超时或等待线程被中断时，会把自己的 node.thread 置 null，并重扫 waiters 链解除失效节点",
+            focus: "方法焦点：Thread.interrupted()/nanos<=0 -> removeWaiter(q)",
+            runner: "Runner",
+            callable: "Callable#task",
+            outcome: "null",
+            state: "NEW(0)",
+            waiters: "G2（G1 已清理）",
+            result: "G1 离开等待；任务仍可继续完成",
+            fieldFocus: ["waiters", "result"],
+            flowActive: ["get", "await", "node", "push", "park"],
+            threads: [
+                {name: "Runner", state: "RUNNING", desc: "任务仍在执行，不受 G1 超时影响"},
+                {name: "G1 get(timeout)", state: "EXCEPTION", desc: "超时或中断后离开等待", active: true},
+                {name: "G2 get()", state: "PARKED", desc: "仍保留在 waiters 栈"},
+                {name: "Canceller", state: "IDLE", desc: "未参与"}
+            ],
+            waitersStack: [
+                {id: "N2", role: "TOP", thread: "G2", threadState: "PARKED", next: "null", active: true}
+            ],
+            chain: [
+                "awaitDone(timed, nanos)",
+                "Thread.interrupted() 或 nanos <= 0",
+                "removeWaiter(q)",
+                "get(timeout) 可能抛 TimeoutException",
+                "被中断则抛 InterruptedException"
+            ],
+            micro: [
+                "removeWaiter 先 node.thread=null，表示该等待节点失效",
+                "内部重扫 waiters 链，跳过 thread==null 的节点；头节点删除要 CAS waiters",
+                "移除等待者不是 cancel 任务，Runner 仍可正常 set(result)"
+            ],
+            cas: [
+                "如果失效节点在栈顶，CAS waiters: q -> q.next",
+                "如果失效节点在中间，pred.next = s；若 pred 也失效则 retry"
+            ],
+            delta: [
+                "N1.thread: G1 -> null",
+                "waiters 链移除 N1，真实栈只剩 N2.next=null",
+                "state 保持 NEW"
+            ],
+            next: [
+                "最后看 FutureTask 的不可逆终态边界，以及 runAndReset 为什么是受保护特例"
+            ],
+            source: [
+                "FutureTask.java: awaitDone interrupt/timeout 分支",
+                "FutureTask.java: private void removeWaiter(WaitNode node)"
+            ]
+        },
+        {
+            title: "24) 终态边界：完成、异常、取消都不可逆",
+            summary: "以 NORMAL(2) 完成后的快照收束：state 已是终态，后续 run、set、setException、cancel 的关键 CAS 都不会再成功",
+            focus: "方法焦点：NORMAL 终态后的快速失败与 runAndReset 边界",
+            runner: "null",
+            callable: "null",
+            outcome: "42",
+            state: "NORMAL(2)",
+            waiters: "null",
+            result: "isDone=true；get=42；cancel=false",
+            fieldFocus: ["state", "result"],
+            flowActive: ["run_start", "set", "cancel", "report"],
+            threads: [
+                {name: "Runner", state: "IDLE", desc: "终态后再次 run() 直接 return"},
+                {name: "G1 get()", state: "RUNNING", desc: "看到 NORMAL，直接 report 返回 42", active: true},
+                {name: "G2 get()", state: "READY", desc: "新 get 不再入 waiters"},
+                {name: "Canceller", state: "READY", desc: "终态后 cancel 返回 false", active: true}
+            ],
+            waitersStack: [],
+            chain: [
+                "isDone(): state != NEW",
+                "isCancelled(): state >= CANCELLED",
+                "run(): state != NEW -> return",
+                "set/setException/cancel: CAS NEW 失败",
+                "runAndReset(): state != NEW -> return false"
+            ],
+            micro: [
+                "NORMAL、EXCEPTIONAL、CANCELLED、INTERRUPTED 都是终态",
+                "COMPLETING 和 INTERRUPTING 是短暂中间态，不是用户可依赖的业务状态",
+                "本步快照固定为 NORMAL；其它终态只改变 report 的外部结果，不改变终态不可逆规则",
+                "runAndReset 的成功保持 NEW 只发生在进入时 state==NEW 且 call 成功；当前 NORMAL 快照会快速失败"
+            ],
+            cas: [
+                "NORMAL 后 CAS state: NEW -> COMPLETING/CANCELLED/INTERRUPTING 均失败",
+                "再次 CAS runner 通常也会因 state!=NEW 提前返回"
+            ],
+            delta: [
+                "state 保持 NORMAL(2)",
+                "outcome 保持 42，waiters 保持 null",
+                "callable 已在普通完成路径被置 null"
+            ],
+            next: [
+                "流程结束：构造、run、get 等待栈、正常发布、异常、取消、中断窗口和 removeWaiter 均已覆盖"
+            ],
+            source: [
+                "FutureTask.java: isDone(), isCancelled(), run(), runAndReset()",
+                "FutureTask.java: set(), setException(), cancel() 的 CAS NEW 入口"
+            ]
+        }
+    ];
+
+    if (stepMeta.length !== steps.length) {
+        throw new Error(`stepMeta length ${stepMeta.length} does not match steps length ${steps.length}`);
+    }
+
+    const el = {
+        prevBtn: document.getElementById("prevBtn"),
+        nextBtn: document.getElementById("nextBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        actionValue: document.getElementById("actionValue"),
+        invariantValue: document.getElementById("invariantValue"),
+        runnerValue: document.getElementById("runnerValue"),
+        callableValue: document.getElementById("callableValue"),
+        outcomeValue: document.getElementById("outcomeValue"),
+        stateValue: document.getElementById("stateValue"),
+        waitersValue: document.getElementById("waitersValue"),
+        resultValue: document.getElementById("resultValue"),
+        flowRun: document.getElementById("flowRun"),
+        flowGet: document.getElementById("flowGet"),
+        flowCancel: document.getElementById("flowCancel"),
+        threadLane: document.getElementById("threadLane"),
+        stackWrap: document.getElementById("stackWrap"),
+        stepTitle: document.getElementById("stepTitle"),
+        stepSummary: document.getElementById("stepSummary"),
+        focusBox: document.getElementById("focusBox"),
+        chainList: document.getElementById("chainList"),
+        microList: document.getElementById("microList"),
+        casList: document.getElementById("casList"),
+        deltaList: document.getElementById("deltaList"),
+        nextList: document.getElementById("nextList"),
+        sourceList: document.getElementById("sourceList"),
+        timeline: document.getElementById("timeline"),
+        stepCounter: document.getElementById("stepCounter"),
+        stage: document.getElementById("stage")
+    };
+
+    const statusCards = Array.from(document.querySelectorAll(".status[data-field]"));
+
+    let current = 0;
+
+    function fullStep(index) {
+        return {
+            ...stepMeta[index],
+            ...steps[index]
+        };
+    }
+
+    function stateClass(state) {
+        const s = String(state || "").toUpperCase();
+        if (s === "RUNNING") return "b-running";
+        if (s === "READY") return "b-ready";
+        if (s === "PARKED") return "b-parked";
+        if (s === "EXCEPTION") return "b-ex";
+        return "b-idle";
+    }
+
+    function flashStage() {
+        el.stage.classList.remove("flash");
+        void el.stage.offsetWidth;
+        el.stage.classList.add("flash");
+        window.setTimeout(() => el.stage.classList.remove("flash"), 220);
+    }
+
+    function renderStatus(step) {
+        el.runnerValue.textContent = step.runner;
+        el.callableValue.textContent = step.callable;
+        el.outcomeValue.textContent = step.outcome;
+        el.stateValue.textContent = step.state;
+        el.waitersValue.textContent = step.waiters;
+        el.resultValue.textContent = step.result;
+
+        const activeFields = new Set(step.fieldFocus || []);
+        statusCards.forEach((card) => {
+            card.classList.toggle("active", activeFields.has(card.dataset.field));
+        });
+    }
+
+    function renderThreads(step) {
+        el.threadLane.innerHTML = "";
+        step.threads.forEach((thread) => {
+            const item = document.createElement("article");
+            item.className = `thread${thread.active ? " active" : ""}`;
+            item.innerHTML = `
+                <div class="thread-top">
+                    <strong class="thread-name">${thread.name}</strong>
+                    <span class="badge ${stateClass(thread.state)}">${thread.state}</span>
+                </div>
+                <p>${thread.desc}</p>
+            `;
+            el.threadLane.appendChild(item);
+        });
+    }
+
+    function renderWaiters(step) {
+        el.stackWrap.innerHTML = "";
+        const nodes = step.waitersStack || [];
+        if (nodes.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "stack-empty";
+            empty.innerHTML = `
+                <strong>waiters 栈为空</strong>
+                <span>waiters=null</span>
+            `;
+            el.stackWrap.appendChild(empty);
+            return;
+        }
+
+        const chain = document.createElement("div");
+        chain.className = "stack-chain";
+
+        nodes.forEach((node, index) => {
+            const card = document.createElement("article");
+            const classes = ["stack-node"];
+            if (String(node.role || "").includes("TOP")) classes.push("top");
+            if (String(node.role || "").includes("DETACHED")) classes.push("detached");
+            if (node.cleared) classes.push("cleared");
+            if (node.active) classes.push("active");
+            card.className = classes.join(" ");
+            card.innerHTML = `
+                <div class="node-top">
+                    <span class="node-title">${node.id}</span>
+                    <span class="node-role">${node.role || "NODE"}</span>
+                </div>
+                <div class="node-line"><span class="label">thread:</span> ${node.thread}</div>
+                <div class="node-line"><span class="label">threadState:</span> <span class="badge ${stateClass(node.threadState)}">${node.threadState}</span></div>
+                <div class="node-line"><span class="label">next:</span> ${node.next}</div>
+            `;
+            chain.appendChild(card);
+
+            const nextNode = nodes[index + 1];
+            if (nextNode && node.next === nextNode.id) {
+                const link = document.createElement("div");
+                link.className = "stack-link";
+                link.setAttribute("aria-hidden", "true");
+                link.textContent = "→";
+                chain.appendChild(link);
+            }
+        });
+
+        el.stackWrap.appendChild(chain);
+    }
+
+    function renderList(target, lines, emptyText) {
+        target.innerHTML = "";
+        if (!lines || lines.length === 0) {
+            const li = document.createElement("li");
+            li.className = "empty";
+            li.textContent = emptyText;
+            target.appendChild(li);
+            return;
+        }
+
+        lines.forEach((line) => {
+            const li = document.createElement("li");
+            li.textContent = line;
+            target.appendChild(li);
+        });
+    }
+
+    function renderTimeline() {
+        el.timeline.innerHTML = "";
+        let activeChip = null;
+        let previousGroup = null;
+        const currentGroup = fullStep(current).group;
+        steps.forEach((rawStep, index) => {
+            const step = fullStep(index);
+            if (step.group !== previousGroup) {
+                const groupLabel = document.createElement("div");
+                const groupLastIndex = stepMeta.reduce((last, item, itemIndex) => {
+                    return item.group === step.group ? itemIndex : last;
+                }, -1);
+                const groupClasses = ["timeline-group"];
+                if (groupLastIndex < current) groupClasses.push("done");
+                if (step.group === currentGroup) groupClasses.push("active");
+                groupLabel.className = groupClasses.join(" ");
+                groupLabel.textContent = step.group;
+                groupLabel.setAttribute("role", "heading");
+                groupLabel.setAttribute("aria-level", "3");
+                el.timeline.appendChild(groupLabel);
+                previousGroup = step.group;
+            }
+
+            const chip = document.createElement("button");
+            chip.type = "button";
+            const classes = ["step-chip"];
+            if (index < current) classes.push("done");
+            if (index === current) classes.push("active");
+            const label = rawStep.title.replace(/^\d+\)\s*/, "");
+            chip.className = classes.join(" ");
+            chip.setAttribute("aria-label", `跳转到第 ${index + 1} 步：${step.group} / ${step.phase}，${label}`);
+            if (index === current) {
+                chip.setAttribute("aria-current", "step");
+                activeChip = chip;
+            }
+            const labelWrap = document.createElement("span");
+            const title = document.createElement("span");
+            const phase = document.createElement("span");
+            labelWrap.className = "step-chip-copy";
+            title.className = "step-chip-title";
+            phase.className = "step-chip-phase";
+            title.textContent = label;
+            phase.textContent = step.phase;
+            labelWrap.appendChild(title);
+            labelWrap.appendChild(phase);
+            chip.appendChild(labelWrap);
+            chip.addEventListener("click", () => {
+                current = index;
+                render(true);
+            });
+            el.timeline.appendChild(chip);
+        });
+
+        if (activeChip) {
+            activeChip.scrollIntoView({block: "nearest", inline: "nearest"});
+        }
+    }
+
+    function renderFlow(step) {
+        function paintRow(target, label, nodes) {
+            const active = new Set(step.flowActive || []);
+            target.innerHTML = "";
+            target.className = `flow-row${nodes.some((node) => active.has(node.id)) ? " active" : ""}`;
+
+            const rowLabel = document.createElement("div");
+            rowLabel.className = "flow-label";
+            rowLabel.textContent = label;
+            target.appendChild(rowLabel);
+
+            const track = document.createElement("div");
+            track.className = "flow-track";
+            target.appendChild(track);
+
+            nodes.forEach((node, index) => {
+                const box = document.createElement("div");
+                box.className = `flow-node${active.has(node.id) ? " active" : ""}`;
+                box.title = node.label;
+                box.textContent = node.label;
+                track.appendChild(box);
+
+                if (index < nodes.length - 1) {
+                    const arrow = document.createElement("span");
+                    arrow.className = "flow-arrow";
+                    arrow.textContent = "→";
+                    track.appendChild(arrow);
+                }
+            });
+        }
+
+        paintRow(el.flowRun, "run", flowRows.run);
+        paintRow(el.flowGet, "get", flowRows.get);
+        paintRow(el.flowCancel, "cancel", flowRows.cancel);
+    }
+
+    function render(animate) {
+        const step = fullStep(current);
+
+        el.stage.dataset.effect = step.effect || "none";
+        el.stage.dataset.group = step.groupKey || "none";
+        el.actionValue.textContent = step.action;
+        el.invariantValue.textContent = step.invariant;
+
+        renderStatus(step);
+        renderFlow(step);
+        renderThreads(step);
+        renderWaiters(step);
+
+        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepSummary.textContent = step.summary;
+        el.focusBox.textContent = step.focus;
+
+        renderList(el.chainList, step.chain, "暂无调用链");
+        renderList(el.microList, step.micro, "暂无细节点");
+        renderList(el.casList, step.cas, "本步无 CAS / 原子操作");
+        renderList(el.deltaList, step.delta, "本步无字段变化");
+        renderList(el.nextList, step.next, "流程结束");
+        renderList(el.sourceList, step.source, "暂无源码锚点");
+
+        renderTimeline();
+        el.stepCounter.textContent = `第 ${current + 1} / ${steps.length} 步`;
+
+        el.prevBtn.disabled = current === 0;
+        el.nextBtn.disabled = current === steps.length - 1;
+
+        if (animate) flashStage();
+    }
+
+    function prev() {
+        if (current > 0) {
+            current -= 1;
+            render(true);
+        }
+    }
+
+    function next() {
+        if (current < steps.length - 1) {
+            current += 1;
+            render(true);
+        }
+    }
+
+    el.prevBtn.addEventListener("click", prev);
+    el.nextBtn.addEventListener("click", next);
+    el.resetBtn.addEventListener("click", () => {
+        current = 0;
+        render(true);
+    });
+
+    window.addEventListener("keydown", (event) => {
+        const target = event.target;
+        const tag = target && target.tagName ? target.tagName.toUpperCase() : "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (target && target.isContentEditable)) {
+            return;
+        }
+
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            prev();
+        } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            next();
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            current = 0;
+            render(true);
+        }
+    });
+
+    render(false);
+})();
+</script>
+</body>
+</html>
