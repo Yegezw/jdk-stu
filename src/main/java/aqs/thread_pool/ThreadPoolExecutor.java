@@ -361,8 +361,8 @@ public class ThreadPoolExecutor extends AbstractExecutorService
          * The value 1 represents the locked state.
          *
          * 锁用来做 Worker 的状态标志位: 初始状态、空闲状态、运行状态
-         * 1、初始状态 -1 = 刚创建的 Worker()
-         * 2、空闲状态  0 = runWorker(this) 解锁后
+         * 1、初始状态 -1 = 刚创建的 Worker(), 线程还没真正进入 runWorker(this), 不允许中断 (因为还没分配线程)
+         * 2、空闲状态  0 = runWorker(this) 解锁后, 线程空闲, 可能正在 getTask() 等任务
          * 3、运行状态  1 = 当 thread.start() -> run() -> runWorker(this) -> getTask() 获取到任务并执行 w.lock() 后
          *
          * Worker 通过继承 AQS 来实现 "独占锁 + 不可重入锁" 功能

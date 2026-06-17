@@ -1005,7 +1005,7 @@
 
     const steps = [
         {
-            title: "1) 初始化：state=0（读=0，写=0）",
+            title: "初始化：state=0（读=0，写=0）",
             summary: "构造 ReentrantReadWriteLock(false) 后，底层 NonfairSync 的 AQS.state 为 0，Sync Queue 尚未建立",
             focus: "方法焦点：new ReentrantReadWriteLock(false) -> new NonfairSync()",
             state: "0x00000000 (R=0, W=0)",
@@ -1040,7 +1040,7 @@
             ]
         },
         {
-            title: "2) T1 写锁首次获取：CAS(0->1) 成功",
+            title: "T1 写锁首次获取：CAS(0->1) 成功",
             summary: "T1 调用 WriteLock.lock()，进入 acquire(1)->tryAcquire(1)，命中 c==0 分支并 CAS 成功，成为写锁 owner",
             focus: "方法焦点：WriteLock.lock -> Sync.acquire -> tryAcquire",
             state: "0x00000001 (R=0, W=1)",
@@ -1078,7 +1078,7 @@
             ]
         },
         {
-            title: "3) T1 写锁重入：低 16 位递增",
+            title: "T1 写锁重入：低 16 位递增",
             summary: "T1 再次调用 WriteLock.lock()，tryAcquire 看到 current==owner，直接 setState(c+1) 完成重入",
             focus: "方法焦点：tryAcquire 重入分支（current == owner）",
             state: "0x00000002 (R=0, W=2)",
@@ -1114,7 +1114,7 @@
             ]
         },
         {
-            title: "4) T2 读锁失败：共享节点 N2 入队",
+            title: "T2 读锁失败：共享节点 N2 入队",
             summary: "T2 调用 ReadLock.lock()，tryAcquireShared 因写锁 owner!=current 返回 -1，随后 addWaiter(SHARED) + enq",
             focus: "方法焦点：ReadLock.lock -> acquireShared -> addWaiter(SHARED)",
             state: "0x00000002 (R=0, W=2)",
@@ -1156,7 +1156,7 @@
             ]
         },
         {
-            title: "5) N2 首轮自旋：设置 H.waitStatus=SIGNAL",
+            title: "N2 首轮自旋：设置 H.waitStatus=SIGNAL",
             summary: "N2 在 shouldParkAfterFailedAcquire 中把前驱 H 的 waitStatus 从 0 改为 -1，建立 “释放时唤醒后继” 协议",
             focus: "方法焦点：shouldParkAfterFailedAcquire(pred=H, node=N2)",
             state: "0x00000002 (R=0, W=2)",
@@ -1194,7 +1194,7 @@
             ]
         },
         {
-            title: "6) N2 第二轮：共享节点进入 park",
+            title: "N2 第二轮：共享节点进入 park",
             summary: "再次循环时 pred.ws 已是 SIGNAL，N2 调用 parkAndCheckInterrupt 进入阻塞等待",
             focus: "方法焦点：parkAndCheckInterrupt",
             state: "0x00000002 (R=0, W=2)",
@@ -1231,7 +1231,7 @@
             ]
         },
         {
-            title: "7) T3 读锁入队：形成共享队列 H->N2->N3",
+            title: "T3 读锁入队：形成共享队列 H->N2->N3",
             summary: "T3 读锁同样因 T1 持写锁失败，入队为 N3(SHARED)，并在前驱 N2 后阻塞",
             focus: "方法焦点：共享尾插 + 后继阻塞",
             state: "0x00000002 (R=0, W=2)",
@@ -1274,7 +1274,7 @@
             ]
         },
         {
-            title: "8) T1 第一次 WriteLock.unlock：仅重入计数减 1",
+            title: "T1 第一次 WriteLock.unlock：仅重入计数减 1",
             summary: "T1 调用 WriteLock.unlock()，tryRelease 把低 16 位从 2 减到 1，free=false，不触发唤醒",
             focus: "方法焦点：tryRelease（free=false）",
             state: "0x00000001 (R=0, W=1)",
@@ -1313,7 +1313,7 @@
             ]
         },
         {
-            title: "9) T1 第二次 WriteLock.unlock：释放成功并唤醒 N2",
+            title: "T1 第二次 WriteLock.unlock：释放成功并唤醒 N2",
             summary: "T1 再次调用 WriteLock.unlock()，state 变 0，owner 清空，release(1) 调用 unparkSuccessor(head) 唤醒 N2",
             focus: "方法焦点：release -> unparkSuccessor(H)",
             state: "0x00000000 (R=0, W=0)",
@@ -1354,7 +1354,7 @@
             ]
         },
         {
-            title: "10) N2 获取读锁成功：setHeadAndPropagate 唤醒 N3",
+            title: "N2 获取读锁成功：setHeadAndPropagate 唤醒 N3",
             summary: "N2 被唤醒后命中 p==head，tryAcquireShared CAS 成功把读计数加 1，随后 setHeadAndPropagate 触发共享传播",
             focus: "方法焦点：tryAcquireShared + setHeadAndPropagate",
             state: "0x00010000 (R=1, W=0)",
@@ -1396,7 +1396,7 @@
             ]
         },
         {
-            title: "11) N3 读锁获取成功：读计数变 2",
+            title: "N3 读锁获取成功：读计数变 2",
             summary: "N3 被唤醒后再次 tryAcquireShared，CAS 把 state 从 65536 增到 131072，成为新 head",
             focus: "方法焦点：共享后继节点获取 + head 前移",
             state: "0x00020000 (R=2, W=0)",
@@ -1434,7 +1434,7 @@
             ]
         },
         {
-            title: "12) T4 写锁失败：独占节点 N4 入队并阻塞",
+            title: "T4 写锁失败：独占节点 N4 入队并阻塞",
             summary: "T4 调用 WriteLock.lock() 时 c!=0 且 w==0（只有读者无写者），tryAcquire 直接 false，随后以 EXCLUSIVE 节点入队并 park",
             focus: "方法焦点：tryAcquire(c!=0 && w==0) + addWaiter(EXCLUSIVE)",
             state: "0x00020000 (R=2, W=0)",
@@ -1475,7 +1475,7 @@
             ]
         },
         {
-            title: "13) T2 释放读锁：读计数 2->1，不唤醒写者",
+            title: "T2 释放读锁：读计数 2->1，不唤醒写者",
             summary: "T2 调用 ReadLock.unlock()，tryReleaseShared 仅把 sharedCount 从 2 减到 1，返回 false",
             focus: "方法焦点：tryReleaseShared(nextc != 0)",
             state: "0x00010000 (R=1, W=0)",
@@ -1513,7 +1513,7 @@
             ]
         },
         {
-            title: "14) T3 释放最后读锁：触发 doReleaseShared 唤醒 N4",
+            title: "T3 释放最后读锁：触发 doReleaseShared 唤醒 N4",
             summary: "T3 调用 ReadLock.unlock() 把 sharedCount 降为 0，tryReleaseShared 返回 true，doReleaseShared 清理 head.waitStatus(SIGNAL->0) 并 unpark N4",
             focus: "方法焦点：releaseShared(true) -> doReleaseShared",
             state: "0x00000000 (R=0, W=0)",
@@ -1554,7 +1554,7 @@
             ]
         },
         {
-            title: "15) N4 获取写锁成功：独占恢复",
+            title: "N4 获取写锁成功：独占恢复",
             summary: "N4 被调度后在 acquire 循环中命中 p==head，tryAcquire CAS(0->1) 成功，成为新的写锁 owner",
             focus: "方法焦点：acquireQueued 成功收尾",
             state: "0x00000001 (R=0, W=1)",
@@ -1593,7 +1593,7 @@
             ]
         },
         {
-            title: "16) T4 WriteLock.unlock：主流程闭环",
+            title: "T4 WriteLock.unlock：主流程闭环",
             summary: "T4 执行 WriteLock.unlock()，tryRelease 让 state 回到 0 并清空 owner，场景完整闭环",
             focus: "方法焦点：tryRelease 终态",
             state: "0x00000000 (R=0, W=0)",
@@ -1630,7 +1630,7 @@
             ]
         },
         {
-            title: "17) 独立分支 A：读锁重入前置快照（写者已排队）",
+            title: "独立分支 A：读锁重入前置快照（写者已排队）",
             summary: "独立场景：T2/T3 已持有读锁，队列头后是写节点 N4，那么 readerShouldBlock() 会返回 true，但已有读持有者允许重入",
             focus: "方法焦点：readerShouldBlock + fullTryAcquireShared",
             state: "0x00020000 (R=2, W=0)",
@@ -1667,7 +1667,7 @@
             ]
         },
         {
-            title: "18) T2 读锁重入（firstReader 分支）",
+            title: "T2 读锁重入（firstReader 分支）",
             summary: "写者在队列前部导致 readerShouldBlock=true；T2 因 firstReader==current 可在 fullTryAcquireShared 中继续重入",
             focus: "方法焦点：fullTryAcquireShared -> firstReaderHoldCount++",
             state: "0x00030000 (R=3, W=0)",
@@ -1707,7 +1707,7 @@
             ]
         },
         {
-            title: "19) T3 读锁重入（cachedHoldCounter / ThreadLocal 分支）",
+            title: "T3 读锁重入（cachedHoldCounter / ThreadLocal 分支）",
             summary: "T3 不是 firstReader；在 readerShouldBlock=true 下，需通过 cachedHoldCounter（或回退 ThreadLocalHoldCounter）证明自己已持有读锁",
             focus: "方法焦点：fullTryAcquireShared 的 rh.count 校验",
             state: "0x00040000 (R=4, W=0)",
@@ -1749,7 +1749,7 @@
             ]
         },
         {
-            title: "20) 独立分支 B：写锁降级第 1 步（先拿读锁）",
+            title: "独立分支 B：写锁降级第 1 步（先拿读锁）",
             summary: "T1 持有写锁时再调用 ReadLock.lock() 合法且会成功，形成 W + R 并存状态（降级前置）",
             focus: "方法焦点：tryAcquireShared(owner==current) + 写锁降级",
             state: "0x00010001 (R=1, W=1)",
@@ -1785,7 +1785,7 @@
             ]
         },
         {
-            title: "21) 写锁降级第 2 步：释放写锁，仅保留读锁",
+            title: "写锁降级第 2 步：释放写锁，仅保留读锁",
             summary: "T1 执行 WriteLock.unlock() 后写位清零，读位保留；即从独占写模式平滑切到共享读模式",
             focus: "方法焦点：tryRelease + downgrade 完成态",
             state: "0x00010000 (R=1, W=0)",
@@ -1820,7 +1820,7 @@
             ]
         },
         {
-            title: "22) 读锁升级语义：read->write 不支持（阻塞式 lock() 必然自陷死锁）",
+            title: "读锁升级语义：read->write 不支持（阻塞式 lock() 必然自陷死锁）",
             summary: "独立场景：T2 持有读锁后直接调用 WriteLock.lock()，tryAcquire 因 c!=0 且 w==0 失败，入 EXCLUSIVE 队列并 park；在不释放读锁的前提下会必然死锁",
             focus: "方法焦点：tryAcquire(c!=0 && w==0) + 升级死锁闭环",
             state: "0x00010000 (R=1, W=0)",
@@ -2290,7 +2290,7 @@
             const classes = ["step-chip"];
             if (index < current) classes.push("done");
             if (index === current) classes.push("active");
-            const label = rawStep.title.replace(/^\d+\)\s*/, "");
+            const label = rawStep.title;
             chip.className = classes.join(" ");
             chip.setAttribute("aria-label", `跳转到第 ${index + 1} 步：${step.group} / ${step.phase}，${label}`);
             if (index === current) {
@@ -2371,7 +2371,7 @@
         renderThreads(step);
         renderQueue(step);
 
-        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepTitle.textContent = step.title;
         el.stepSummary.textContent = step.summary;
         el.focusBox.textContent = step.focus;
 

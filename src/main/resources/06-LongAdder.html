@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" href="data:," />
     <title>LongAdder 分片累加全细节流程图</title>
     <style>
         :root {
@@ -1352,7 +1351,7 @@
 
     const steps = [
         {
-            title: "1) 构造 LongAdder：零值字段，尚无 Cell[]",
+            title: "构造 LongAdder：零值字段，尚无 Cell[]",
             summary: "LongAdder 继承 Striped64，构造函数不分配 cells；base、cells、cellsBusy 都保持默认零值",
             focus: "方法焦点：LongAdder() / Striped64 字段默认值",
             base: "0",
@@ -1401,7 +1400,7 @@
             ]
         },
         {
-            title: "2) T1 add(1)：base 快路径 CAS 成功",
+            title: "T1 add(1)：base 快路径 CAS 成功",
             summary: "add 先读 cells；cells 仍为 null 时尝试 casBase，成功就直接返回，不进入 longAccumulate",
             focus: "方法焦点：LongAdder.add(long) 中的 cells null + casBase 成功分支",
             base: "1",
@@ -1454,7 +1453,7 @@
             ]
         },
         {
-            title: "3) base 发生竞争：一个线程赢，另一个线程转慢路",
+            title: "base 发生竞争：一个线程赢，另一个线程转慢路",
             summary: "T2 与 T3 同时以 base=1 计算新值；T3 先把 base 改成 2，T2 的 CAS 失败，进入 longAccumulate",
             focus: "方法焦点：!casBase(...) 触发 longAccumulate(x, null, uncontended)",
             base: "2",
@@ -1508,7 +1507,7 @@
             ]
         },
         {
-            title: "4) 初始化 probe：线程哈希码从 0 变为可用值",
+            title: "初始化 probe：线程哈希码从 0 变为可用值",
             summary: "T2 进入 longAccumulate 后发现 getProbe() 为 0，调用 ThreadLocalRandom.current() 初始化 probe，并把 wasUncontended 改回 true",
             focus: "方法焦点：if ((h = getProbe()) == 0) ThreadLocalRandom.current()",
             base: "2",
@@ -1562,7 +1561,7 @@
             ]
         },
         {
-            title: "5) 抢 cellsBusy：T2 取得初始化门闩",
+            title: "抢 cellsBusy：T2 取得初始化门闩",
             summary: "cells 仍为 null 且 cellsBusy 为 0，T2 通过 CAS 把 cellsBusy 改成 1，进入初始化临界区",
             focus: "方法焦点：else if (cellsBusy == 0 && cells == as && casCellsBusy())",
             base: "2",
@@ -1616,7 +1615,7 @@
             ]
         },
         {
-            title: "6) 初始化竞争：拿不到 cellsBusy 的线程回退 base",
+            title: "初始化竞争：拿不到 cellsBusy 的线程回退 base",
             summary: "T3 在 cells 尚未发布、cellsBusy 已为 1 时进入慢路；它不能建表，于是尝试 casBase 作为 fallback",
             focus: "方法焦点：cells 为 null 且抢不到 cellsBusy 时的 casBase fallback",
             base: "3",
@@ -1671,7 +1670,7 @@
             ]
         },
         {
-            title: "7) 发布 Cell[2]：第一条分片落到 probe 对应 slot",
+            title: "发布 Cell[2]：第一条分片落到 probe 对应 slot",
             summary: "T2 在门闩内创建 Cell[2]，把本次 +1 放到 h&1 对应的 slot，然后 finally 释放 cellsBusy",
             focus: "方法焦点：Cell[] rs = new Cell[2]; rs[h & 1] = new Cell(x); cells = rs",
             base: "3",
@@ -1729,7 +1728,7 @@
             ]
         },
         {
-            title: "8) cells 非 null：直接命中 Cell CAS",
+            title: "cells 非 null：直接命中 Cell CAS",
             summary: "T1 再次 add 时发现 cells 已存在；它按自己的 probe 命中 cells[1]，对 Cell.value 做 CAS",
             focus: "方法焦点：a = as[getProbe() & m]; a.cas(v, v + x)",
             base: "3",
@@ -1785,7 +1784,7 @@
             ]
         },
         {
-            title: "9) 命中空 slot：用 cellsBusy 补一个新 Cell",
+            title: "命中空 slot：用 cellsBusy 补一个新 Cell",
             summary: "T3 的 probe 落到 cells[0]，该 slot 为空；它短暂持有 cellsBusy，把 new Cell(1) 填进去",
             focus: "方法焦点：if (a == null) try to attach new Cell",
             base: "3",
@@ -1845,7 +1844,7 @@
             ]
         },
         {
-            title: "10) add 入口 Cell CAS 失败：带着 wasUncontended=false 进慢路",
+            title: "add 入口 Cell CAS 失败：带着 wasUncontended=false 进慢路",
             summary: "T2 与 T1 同时命中 cells[1]；T1 先把 value 改成 3，T2 的 Cell CAS 失败，于是进入 longAccumulate(false)",
             focus: "方法焦点：!(uncontended = a.cas(...)) 后调用 longAccumulate",
             base: "3",
@@ -1903,7 +1902,7 @@
             ]
         },
         {
-            title: "11) 已知失败只推进 probe：本轮不改 value",
+            title: "已知失败只推进 probe：本轮不改 value",
             summary: "T2 在 longAccumulate 中命中非空 Cell，但 wasUncontended=false；源码只把它改回 true，然后 advanceProbe",
             focus: "方法焦点：else if (!wasUncontended) wasUncontended = true; h = advanceProbe(h)",
             base: "3",
@@ -1961,7 +1960,7 @@
             ]
         },
         {
-            title: "12) 第一次真实碰撞：设置 collide，不扩容",
+            title: "第一次真实碰撞：设置 collide，不扩容",
             summary: "T2 迁移到 slot 0 后仍和 T3 冲突；第一次 Cell CAS 失败只把 collide 从 false 改为 true，然后继续 rehash",
             focus: "方法焦点：else if (!collide) collide = true; h = advanceProbe(h)",
             base: "3",
@@ -2021,7 +2020,7 @@
             ]
         },
         {
-            title: "13) 第二次连续碰撞：Cell[2] 扩容为 Cell[4]",
+            title: "第二次连续碰撞：Cell[2] 扩容为 Cell[4]",
             summary: "T2 又一次在非空 slot 上 CAS 失败，且 collide 已经为 true；它抢到 cellsBusy 后复制旧数组到新数组",
             focus: "方法焦点：new Cell[n << 1] 后循环复制旧 Cell 引用",
             base: "3",
@@ -2082,7 +2081,7 @@
             ]
         },
         {
-            title: "14) 新 mask 命中空 slot：扩容收益真正出现",
+            title: "新 mask 命中空 slot：扩容收益真正出现",
             summary: "扩容后 T2 的 probe 用 3 做 mask，落到原来不存在的 slot 2；它创建新 Cell 后本次 +1 才完成",
             focus: "方法焦点：扩容后重新循环，再进入空 slot 创建分支",
             base: "3",
@@ -2142,7 +2141,7 @@
             ]
         },
         {
-            title: "15) 容量边界：达到 NCPU 或旧表过期时只迁移 probe",
+            title: "容量边界：达到 NCPU 或旧表过期时只迁移 probe",
             summary: "如果数组长度已经达到 NCPU，或当前线程持有的是旧 cells 引用，CAS 失败不会扩容，只会清 collide 并继续调整 probe",
             focus: "方法焦点：else if (n >= NCPU || cells != as) collide = false",
             base: "3",
@@ -2203,7 +2202,7 @@
             ]
         },
         {
-            title: "16) 稳定分散：多个 Cell 分别 CAS",
+            title: "稳定分散：多个 Cell 分别 CAS",
             summary: "冲突消散后，T1、T2、T3 大多在不同 slot 上更新，各自只竞争自己的 Cell.value",
             focus: "方法焦点：add 入口的常态 Cell CAS 成功路径",
             base: "3",
@@ -2266,7 +2265,7 @@
             ]
         },
         {
-            title: "17) sum() 先读 base：读取路径不阻塞更新",
+            title: "sum() 先读 base：读取路径不阻塞更新",
             summary: "Reader 调用 sum()，第一步把 base 读到局部变量 sum；此时更新线程仍可继续 CAS Cell",
             focus: "方法焦点：long sum = base",
             base: "3",
@@ -2325,7 +2324,7 @@
             ]
         },
         {
-            title: "18) sum() 扫描 cells：逐个累加非 null Cell.value",
+            title: "sum() 扫描 cells：逐个累加非 null Cell.value",
             summary: "Reader 依次读取 cells[0]、cells[1]、cells[2]；每个读到的 value 加到局部 sum 上",
             focus: "方法焦点：for each Cell a: if (a != null) sum += a.value",
             base: "3",
@@ -2385,7 +2384,7 @@
             ]
         },
         {
-            title: "19) 扫描期间并发更新：返回值可能落后",
+            title: "扫描期间并发更新：返回值可能落后",
             summary: "Reader 读过 cells[1]=5 后，T1 又把 cells[1] 改成 6；Reader 不会回头重读，因此返回值不包含这次更新",
             focus: "方法焦点：sum() 的非原子快照说明",
             base: "3",
@@ -2445,7 +2444,7 @@
             ]
         },
         {
-            title: "20) sum 返回边界：适合统计，不适合同步判定",
+            title: "sum 返回边界：适合统计，不适合同步判定",
             summary: "Reader 返回 15，但此刻内存里的 base+cells 已经能算出 16；这正是 LongAdder 用吞吐换精确快照的边界",
             focus: "语义焦点：统计计数器 vs 细粒度同步控制",
             base: "3",
@@ -2504,7 +2503,7 @@
             ]
         },
         {
-            title: "21) reset：只在安静点清值，不删除 Cell[]",
+            title: "reset：只在安静点清值，不删除 Cell[]",
             summary: "reset 把 base 写 0，再把每个非 null Cell.value 写 0；Cell[] 结构保留，后续高竞争可复用",
             focus: "方法焦点：base = 0L; for cells value = 0L",
             base: "0",
@@ -2564,7 +2563,7 @@
             ]
         },
         {
-            title: "22) sumThenReset 与使用边界：不是精确交接棒",
+            title: "sumThenReset 与使用边界：不是精确交接棒",
             summary: "sumThenReset 先累加再清零，但没有锁住 add；若并发更新穿插其中，返回值与清零后的状态都不能当作严格时间边界",
             focus: "语义焦点：LongAdder 是统计计数器，不是同步状态机",
             base: "0 / 或并发写入值",
@@ -2853,7 +2852,7 @@
             const classes = ["step-chip"];
             if (index < current) classes.push("done");
             if (index === current) classes.push("active");
-            const label = rawStep.title.replace(/^\d+\)\s*/, "");
+            const label = rawStep.title;
             chip.className = classes.join(" ");
             chip.setAttribute("aria-label", `跳转到第 ${index + 1} 步：${step.group} / ${step.phase}，${label}`);
             if (index === current) {
@@ -2889,7 +2888,7 @@
         renderThreads(step);
         renderStripes(step);
 
-        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepTitle.textContent = step.title;
         el.stepSummary.textContent = step.summary;
         el.focusBox.textContent = step.focus;
 

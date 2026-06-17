@@ -897,7 +897,7 @@
 (() => {
     const steps = [
         {
-            title: "1) T1 第一次 lock()：fast path 直接成功",
+            title: "T1 第一次 lock()：fast path 直接成功",
             summary: "ReentrantLock.lock() 进入 NonfairSync.lock()，CAS(state, 0->1) 成功，直接设置 owner=T1，不走队列",
             focus: "方法焦点：NonfairSync.lock + compareAndSetState + setExclusiveOwnerThread",
             group: "获取入口",
@@ -939,7 +939,7 @@
             ]
         },
         {
-            title: "2) T1 第二次 lock()：可重入路径",
+            title: "T1 第二次 lock()：可重入路径",
             summary: "T1 再次 lock，NonfairSync.lock 的 CAS(0->1) 失败，转 acquire(1)->tryAcquire->nonfairTryAcquire，可重入成功",
             focus: "方法焦点：acquire(1) + nonfairTryAcquire(重入分支)",
             group: "获取入口",
@@ -981,7 +981,7 @@
             ]
         },
         {
-            title: "3) T2 调用 lock()：fast path 失败，转慢路径",
+            title: "T2 调用 lock()：fast path 失败，转慢路径",
             summary: "T2 进入 NonfairSync.lock，CAS(0->1) 失败后调用 acquire(1)",
             focus: "方法焦点：NonfairSync.lock -> acquire(1)",
             group: "获取入口",
@@ -1022,7 +1022,7 @@
             ]
         },
         {
-            title: "4) T2 addWaiter/enq：创建双向链表",
+            title: "T2 addWaiter/enq：创建双向链表",
             summary: "tryAcquire 失败后，T2 创建 EXCLUSIVE 节点 N2，队列为空时 enq 先创建虚拟 head(H)，再把 N2 挂到 tail",
             focus: "方法焦点：addWaiter(EXCLUSIVE) + enq(node)",
             group: "入队阻塞",
@@ -1070,7 +1070,7 @@
             ]
         },
         {
-            title: "5) acquireQueued#1：先设置前驱 SIGNAL",
+            title: "acquireQueued#1：先设置前驱 SIGNAL",
             summary: "N2 在 acquireQueued 中命中 p==head 但 tryAcquire 失败；shouldParkAfterFailedAcquire 把 pred(H).waitStatus:0->-1(SIGNAL)",
             focus: "方法焦点：acquireQueued + shouldParkAfterFailedAcquire",
             group: "入队阻塞",
@@ -1115,7 +1115,7 @@
             ]
         },
         {
-            title: "6) acquireQueued#2：T2 进入 park",
+            title: "acquireQueued#2：T2 进入 park",
             summary: "第二轮 shouldParkAfterFailedAcquire 看到 pred.ws==SIGNAL 并返回 true；T2 调用 parkAndCheckInterrupt 进入阻塞",
             focus: "方法焦点：shouldParkAfterFailedAcquire + parkAndCheckInterrupt",
             group: "入队阻塞",
@@ -1158,7 +1158,7 @@
             ]
         },
         {
-            title: "7) T1 第一次 unlock()：仅减计数，不唤醒",
+            title: "T1 第一次 unlock()：仅减计数，不唤醒",
             summary: "T1 调用 unlock，tryRelease 计算 c=state-1=1，free=false，release 返回 false，不触发 unpark",
             focus: "方法焦点：ReentrantLock.unlock -> release(1) -> tryRelease",
             group: "释放接棒",
@@ -1203,7 +1203,7 @@
             ]
         },
         {
-            title: "8) T1 第二次 unlock()：完全释放并唤醒 N2",
+            title: "T1 第二次 unlock()：完全释放并唤醒 N2",
             summary: "T1 执行 release(1) 时 tryRelease 成功，head=H 且 ws=-1，unparkSuccessor(H) 先把 ws 复位到 0，再唤醒 N2",
             focus: "方法焦点：tryRelease(完全释放) + unparkSuccessor",
             group: "释放接棒",
@@ -1249,7 +1249,7 @@
             ]
         },
         {
-            title: "9) T2 被唤醒后成功获取锁并 setHead",
+            title: "T2 被唤醒后成功获取锁并 setHead",
             summary: "T2 回到 acquireQueued，自旋命中 p==head 且 tryAcquire 成功，执行 setHead(N2)",
             focus: "方法焦点：acquireQueued 成功分支 + setHead",
             group: "释放接棒",
@@ -1295,7 +1295,7 @@
             ]
         },
         {
-            title: "10) T3 lock()：addWaiter 快速尾插成功",
+            title: "T3 lock()：addWaiter 快速尾插成功",
             summary: "T3 在 T2 持锁期间发起竞争，fast path 失败后进入 acquire，此时队列非空，addWaiter 直接 CAS tail 成功，最终形成 N2<->N3",
             focus: "方法焦点：NonfairSync.lock + acquire + addWaiter fast path",
             group: "二次竞争",
@@ -1342,7 +1342,7 @@
             ]
         },
         {
-            title: "11) acquireQueued#1：先设置前驱 SIGNAL（N3）",
+            title: "acquireQueued#1：先设置前驱 SIGNAL（N3）",
             summary: "N3 在 acquireQueued 中命中 p==head 但 tryAcquire 失败；shouldParkAfterFailedAcquire 把 pred(N2).waitStatus:0->-1(SIGNAL)",
             focus: "方法焦点：acquireQueued + shouldParkAfterFailedAcquire",
             group: "二次竞争",
@@ -1387,7 +1387,7 @@
             ]
         },
         {
-            title: "12) acquireQueued#2：T3 进入 park",
+            title: "acquireQueued#2：T3 进入 park",
             summary: "第二轮 shouldParkAfterFailedAcquire 看到 pred.ws==SIGNAL 并返回 true；T3 调用 parkAndCheckInterrupt 进入阻塞",
             focus: "方法焦点：shouldParkAfterFailedAcquire + parkAndCheckInterrupt",
             group: "二次竞争",
@@ -1429,7 +1429,7 @@
             ]
         },
         {
-            title: "13) T2 unlock()：完全释放并唤醒 N3",
+            title: "T2 unlock()：完全释放并唤醒 N3",
             summary: "T2 执行 release(1) 时 tryRelease 成功，head=N2 且 ws=-1，unparkSuccessor(N2) 先把 ws 复位到 0，再唤醒 N3",
             focus: "方法焦点：tryRelease(完全释放) + unparkSuccessor",
             group: "二次竞争",
@@ -1475,7 +1475,7 @@
             ]
         },
         {
-            title: "14) T3 被唤醒后成功获取锁并 setHead",
+            title: "T3 被唤醒后成功获取锁并 setHead",
             summary: "T3 回到 acquireQueued，自旋命中 p==head 且 tryAcquire 成功，执行 setHead(N3)",
             focus: "方法焦点：acquireQueued 成功分支 + setHead",
             group: "二次竞争",
@@ -1521,7 +1521,7 @@
             ]
         },
         {
-            title: "15) T3 unlock()：无后继时直接结束",
+            title: "T3 unlock()：无后继时直接结束",
             summary: "T3 release(1) 后 state=0，head=N3 且 ws=0，不满足 h.waitStatus!=0，因此不再 unpark",
             focus: "方法焦点：release 的 “无后继唤醒” 分支",
             group: "收尾边界",
@@ -1563,7 +1563,7 @@
             ]
         },
         {
-            title: "16) 错误分支：T4 非持有者 unlock() 抛异常",
+            title: "错误分支：T4 非持有者 unlock() 抛异常",
             summary: "T4 调用 unlock，tryRelease 首行校验 currentThread != owner（owner=null），直接抛 IllegalMonitorStateException",
             focus: "方法焦点：tryRelease 的 owner 校验分支",
             group: "收尾边界",
@@ -1769,7 +1769,7 @@
             const classes = ["step-chip"];
             if (index < current) classes.push("done");
             if (index === current) classes.push("active");
-            const label = step.title.replace(/^\d+\)\s*/, "");
+            const label = step.title;
             chip.className = classes.join(" ");
             chip.setAttribute("aria-label", `跳转到第 ${index + 1} 步：${step.group} / ${step.phase}，${label}`);
             if (index === current) {
@@ -1812,7 +1812,7 @@
         renderThreads(step);
         renderQueue(step);
 
-        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepTitle.textContent = step.title;
         el.stepSummary.textContent = step.summary;
         el.focusBox.textContent = step.focus;
 

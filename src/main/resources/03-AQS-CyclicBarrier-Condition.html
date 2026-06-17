@@ -945,7 +945,7 @@
 (() => {
     const steps = [
         {
-            title: "1) 初始化 CyclicBarrier：parties=3，generation=g0",
+            title: "初始化 CyclicBarrier：parties=3，generation=g0",
             summary: "CyclicBarrier 通过 ReentrantLock + Condition trip 管理等待线程；初始 generation=g0（broken=false），count=3",
             focus: "方法焦点：CyclicBarrier(int, Runnable) 构造",
             generation: "g0 / broken=false",
@@ -978,7 +978,7 @@
             next: ["T1 首先调用 await()，进入 dowait(false, 0L)"]
         },
         {
-            title: "2) T1 到达：--count 得到 index=2（非最后线程）",
+            title: "T1 到达：--count 得到 index=2（非最后线程）",
             summary: "T1 获取锁后进入 dowait，检查 broken/中断都通过；执行 --count 得到 index=2，说明还需两个线程到达",
             focus: "方法焦点：dowait() 前半段（lock + 前置检查 + --count）",
             generation: "g0 / broken=false",
@@ -1011,7 +1011,7 @@
             next: ["T1 将调用 Condition.await：入 Condition Queue + 释放锁 + park"]
         },
         {
-            title: "3) T1 执行 trip.await：进入 Condition Queue 并挂起",
+            title: "T1 执行 trip.await：进入 Condition Queue 并挂起",
             summary: "Condition.await 会先 addConditionWaiter(C1)，再 fullyRelease 释放锁，随后在 isOnSyncQueue(C1)==false 时 park",
             focus: "方法焦点：ConditionObject.await()",
             generation: "g0 / broken=false",
@@ -1047,7 +1047,7 @@
             next: ["T2 到达时也会走同一 await 路径"]
         },
         {
-            title: "4) T2 到达并 await：Condition Queue 形成 C1 -> C2",
+            title: "T2 到达并 await：Condition Queue 形成 C1 -> C2",
             summary: "T2 获取锁后 --count 得到 index=1，随后进入 trip.await，将 C2 追加到条件队列尾部并 park",
             focus: "方法焦点：addConditionWaiter 尾插 + await 挂起",
             generation: "g0 / broken=false",
@@ -1083,7 +1083,7 @@
             next: ["T3 作为最后到达者会触发 index==0 分支"]
         },
         {
-            title: "5) T3 最后到达：index=0，执行 barrierCommand",
+            title: "T3 最后到达：index=0，执行 barrierCommand",
             summary: "T3 在持锁状态下 --count 到 0，进入 “最后到达者” 分支，先执行 barrierCommand，然后调用 nextGeneration",
             focus: "方法焦点：if (index == 0) { ... nextGeneration(); return 0; }",
             generation: "g0 / broken=false",
@@ -1119,7 +1119,7 @@
             next: ["nextGeneration 将 signalAll，并把条件节点转移到 Sync Queue"]
         },
         {
-            title: "6) nextGeneration：signalAll 转移条件节点并重置代",
+            title: "nextGeneration：signalAll 转移条件节点并重置代",
             summary: "trip.signalAll 触发 doSignalAll：C1/C2 逐个 transferForSignal，先从 CONDITION(-2) 改到 0，再 enq 到 Sync Queue，随后 count 复位并创建 g1",
             focus: "方法焦点：nextGeneration() + ConditionObject.doSignalAll()",
             generation: "g1 / broken=false",
@@ -1163,7 +1163,7 @@
             next: ["T3 释放锁后，Sync Queue 头结点后继会被唤醒竞争"]
         },
         {
-            title: "7) T3 返回 0 并 unlock：唤醒 Sync Queue 首节点",
+            title: "T3 返回 0 并 unlock：唤醒 Sync Queue 首节点",
             summary: "最后到达者返回 0 前会在 finally 解锁，AQS release 路径唤醒首个后继（这里是 S1/T1）",
             focus: "方法焦点：dowait finally + lock.unlock()",
             generation: "g1 / broken=false",
@@ -1200,7 +1200,7 @@
             next: ["T1 重新获得锁后，会因 g!=generation 返回旧 index=2"]
         },
         {
-            title: "8) T1 重新获取锁：检测到翻代，返回 index=2",
+            title: "T1 重新获取锁：检测到翻代，返回 index=2",
             summary: "T1 在 Condition.await 中完成 acquireQueued 后回到 dowait 循环，发现本地 g0 != 当前 g1，于是返回 index=2",
             focus: "方法焦点：Condition.await 唤醒后 + dowait 中 g != generation 判断",
             generation: "g1 / broken=false",
@@ -1236,7 +1236,7 @@
             next: ["T2 将重复同样逻辑并返回 index=1"]
         },
         {
-            title: "9) T2 重新获取锁：返回 index=1，第一轮结束",
+            title: "T2 重新获取锁：返回 index=1，第一轮结束",
             summary: "T2 成为下一位获取锁的线程，检测到 g0 已切到 g1，返回 index=1；第一轮三个线程全部通过屏障",
             focus: "方法焦点：第二个等待线程的唤醒与返回",
             generation: "g1 / broken=false",
@@ -1272,7 +1272,7 @@
             next: ["第二轮中演示异常路径：等待中断触发 breakBarrier"]
         },
         {
-            title: "10) 第二轮：T1/T2 再次 await，进入 C1 -> C2",
+            title: "第二轮：T1/T2 再次 await，进入 C1 -> C2",
             summary: "在 g1 中，T1/T2 再次到达并挂起，count 从 3 递减到 1，Condition Queue 重建为 C1->C2，体现 cyclic 特性",
             focus: "方法焦点：可复用轮次中的 await 路径",
             generation: "g1 / broken=false",
@@ -1312,7 +1312,7 @@
             next: ["若等待期间线程被中断，将进入 breakBarrier 异常分支"]
         },
         {
-            title: "11) T2 在 trip.await 中被中断：先转移到 Sync Queue 再重新获取锁",
+            title: "T2 在 trip.await 中被中断：先转移到 Sync Queue 再重新获取锁",
             summary: "T2 在 Condition.await 等待区收到中断后，不会立刻把异常抛给 CyclicBarrier；必须先经 transferAfterCancelledWait 入 Sync Queue，并通过 acquireQueued 重新获取锁，随后 Condition.await 才向 dowait 抛出 InterruptedException",
             focus: "方法焦点：ConditionObject.await 中断路径",
             generation: "g1 / broken=false",
@@ -1355,7 +1355,7 @@
             next: ["dowait 捕获 ie 后执行 breakBarrier，并在 finally 里释放锁"]
         },
         {
-            title: "12) dowait 捕获 ie：执行 breakBarrier 并 signalAll 其它等待线程",
+            title: "dowait 捕获 ie：执行 breakBarrier 并 signalAll 其它等待线程",
             summary: "T2 进入 dowait 的 catch (InterruptedException ie) 后命中 g==generation && !g.broken，执行 breakBarrier：置 broken=true，count 重置为 parties，trip.signalAll 把其它 Condition waiter 转到 Sync Queue",
             focus: "方法焦点：catch (InterruptedException ie) -> breakBarrier()",
             generation: "g1 / broken=true",
@@ -1396,7 +1396,7 @@
             next: ["T2 离开 catch 后进入 finally unlock，再向上抛 InterruptedException"]
         },
         {
-            title: "13) T2 走 finally unlock：释放锁后向上抛 InterruptedException",
+            title: "T2 走 finally unlock：释放锁后向上抛 InterruptedException",
             summary: "dowait 中 throw ie 会先进入 finally 执行 lock.unlock，释放锁并唤醒 Sync Queue 后继，随后 InterruptedException 才离开 CyclicBarrier.await",
             focus: "方法焦点：dowait finally + throw ie",
             generation: "g1 / broken=true",
@@ -1432,7 +1432,7 @@
             next: ["其它等待线程（此处 T1）获取锁后会命中 g.broken 并抛 BrokenBarrierException"]
         },
         {
-            title: "14) T1 按序获取锁：从 Condition.await 返回到 dowait 循环",
+            title: "T1 按序获取锁：从 Condition.await 返回到 dowait 循环",
             summary: "T1 作为 signalAll 后的后继节点，从 Sync Queue 获取锁成功后才从 Condition.await 返回到 dowait for(;;)，然后继续执行屏障状态判断",
             focus: "方法焦点：acquireQueued(S1) + await 返回",
             generation: "g1 / broken=true",
@@ -1466,7 +1466,7 @@
             next: ["dowait 命中 g.broken 分支，抛 BrokenBarrierException"]
         },
         {
-            title: "15) T1 命中 g.broken：finally unlock 后抛 BrokenBarrierException",
+            title: "T1 命中 g.broken：finally unlock 后抛 BrokenBarrierException",
             summary: "T1 在 dowait 循环中首先检查 g.broken，命中后抛 BrokenBarrierException；同样先走 finally lock.unlock，再把异常抛给调用方",
             focus: "方法焦点：if (g.broken) throw BrokenBarrierException + finally unlock",
             generation: "g1 / broken=true",
@@ -1500,7 +1500,7 @@
             next: ["可调用 reset 清理 broken 代并恢复复用"]
         },
         {
-            title: "16) reset：breakBarrier + nextGeneration，进入干净的 g2",
+            title: "reset：breakBarrier + nextGeneration，进入干净的 g2",
             summary: "业务侧调用 reset 后，CyclicBarrier 会先 breakBarrier 再 nextGeneration，最终得到 g2/broken=false，count 重置为 parties，可继续复用",
             focus: "方法焦点：reset()",
             generation: "g2 / broken=false",
@@ -1908,7 +1908,7 @@
             const classes = ["step-chip"];
             if (index < current) classes.push("done");
             if (index === current) classes.push("active");
-            const label = rawStep.title.replace(/^\d+\)\s*/, "");
+            const label = rawStep.title;
             chip.className = classes.join(" ");
             chip.setAttribute("aria-label", `跳转到第 ${index + 1} 步：${step.group} / ${step.phase}，${label}`);
             if (index === current) {
@@ -1954,7 +1954,7 @@
         renderConditionQueue(step);
         renderSyncQueue(step);
 
-        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepTitle.textContent = step.title;
         el.stepSummary.textContent = step.summary;
         el.focusBox.textContent = step.focus;
 

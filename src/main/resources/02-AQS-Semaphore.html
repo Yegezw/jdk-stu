@@ -897,7 +897,7 @@
 (() => {
     const steps = [
         {
-            title: "1) 初始化 Semaphore(2)：共享 state = permits",
+            title: "初始化 Semaphore(2)：共享 state = permits",
             summary: "构造 NonfairSync 时直接 setState(2)，AQS 的 state 在 Semaphore 里表示可用许可数，不表示 owner",
             focus: "方法焦点：Semaphore(int) + Sync.setState(permits)",
             state: "2",
@@ -932,7 +932,7 @@
             ]
         },
         {
-            title: "2) T1 acquire(2)：fast path 成功",
+            title: "T1 acquire(2)：fast path 成功",
             summary: "acquireSharedInterruptibly(2) 首先 tryAcquireShared(2)，CAS(state, 2, 0) 成功并返回 r=0，不入队",
             focus: "方法焦点：tryAcquireShared -> nonfairTryAcquireShared",
             state: "0",
@@ -969,7 +969,7 @@
             ]
         },
         {
-            title: "3) T2 acquire(1)：tryAcquireShared 返回 -1",
+            title: "T2 acquire(1)：tryAcquireShared 返回 -1",
             summary: "state=0 时 remaining=-1，tryAcquireShared 直接返回负值；AQS 转入 doAcquireSharedInterruptibly",
             focus: "方法焦点：acquireSharedInterruptibly + doAcquireSharedInterruptibly",
             state: "0",
@@ -1005,7 +1005,7 @@
             ]
         },
         {
-            title: "4) T2 addWaiter/enq：创建共享队列 H <-> N2",
+            title: "T2 addWaiter/enq：创建共享队列 H <-> N2",
             summary: "addWaiter(SHARED) 在空队列下转 enq：先 CAS(head, null, H)，再 CAS(tail, H, N2)",
             focus: "方法焦点：Queue.addWaiter(SHARED) + Queue.enq(node)",
             state: "0",
@@ -1048,7 +1048,7 @@
             ]
         },
         {
-            title: "5) N2 循环#1：设置前驱 H.waitStatus=SIGNAL",
+            title: "N2 循环#1：设置前驱 H.waitStatus=SIGNAL",
             summary: "N2 前驱是 head，但 tryAcquireShared 仍返回 -1；shouldParkAfterFailedAcquire 将 H.waitStatus: 0 -> -1",
             focus: "方法焦点：shouldParkAfterFailedAcquire(H, N2)",
             state: "0",
@@ -1088,7 +1088,7 @@
             ]
         },
         {
-            title: "6) N2 循环#2：满足条件后 park",
+            title: "N2 循环#2：满足条件后 park",
             summary: "shouldParkAfterFailedAcquire 返回 true，T2 执行 parkAndCheckInterrupt 进入阻塞",
             focus: "方法焦点：parkAndCheckInterrupt",
             state: "0",
@@ -1126,7 +1126,7 @@
             ]
         },
         {
-            title: "7) T3 acquire(1) 失败并快速尾插 N3",
+            title: "T3 acquire(1) 失败并快速尾插 N3",
             summary: "T3 fast path 失败后进入 doAcquireSharedInterruptibly；队列非空，addWaiter(SHARED) 直接 CAS tail 成功",
             focus: "方法焦点：addWaiter(SHARED) fast path",
             state: "0",
@@ -1168,7 +1168,7 @@
             ]
         },
         {
-            title: "8) N3 循环#1：设置 N2.waitStatus=SIGNAL",
+            title: "N3 循环#1：设置 N2.waitStatus=SIGNAL",
             summary: "N3 前驱是 N2（不是 head），tryAcquireShared 不会成功；shouldParkAfterFailedAcquire 将 N2.ws: 0 -> -1",
             focus: "方法焦点：shouldParkAfterFailedAcquire(N2, N3)",
             state: "0",
@@ -1208,7 +1208,7 @@
             ]
         },
         {
-            title: "9) N3 循环#2：进入 park",
+            title: "N3 循环#2：进入 park",
             summary: "N3 满足阻塞协议后 park，形成 H(-1) -> N2(-1) -> N3(0) 的典型共享等待队列",
             focus: "方法焦点：parkAndCheckInterrupt",
             state: "0",
@@ -1245,7 +1245,7 @@
             ]
         },
         {
-            title: "10) T1 第一次 release(1)：SIGNAL 路径唤醒 N2",
+            title: "T1 第一次 release(1)：SIGNAL 路径唤醒 N2",
             summary: "tryReleaseShared 中 CAS(state, 0, 1) 成功后进入 doReleaseShared；head(H).ws=-1，先复位到 0 再 unparkSuccessor(H)",
             focus: "方法焦点：releaseShared + doReleaseShared(ws==SIGNAL)",
             state: "1",
@@ -1289,7 +1289,7 @@
             ]
         },
         {
-            title: "11) T1 第二次 release(1)：ws==0，写入 PROPAGATE",
+            title: "T1 第二次 release(1)：ws==0，写入 PROPAGATE",
             summary: "tryReleaseShared 中 CAS(state, 1, 2) 成功后进入 doReleaseShared；此时 head 仍是旧 H 且 ws=0，CAS(H.ws, 0, -3) 记录 PROPAGATE",
             focus: "方法焦点：doReleaseShared(ws==0 -> PROPAGATE)",
             state: "2",
@@ -1331,7 +1331,7 @@
             ]
         },
         {
-            title: "12) 并发窗口 A：N2 被调度，r=1 并 setHead(N2)",
+            title: "并发窗口 A：N2 被调度，r=1 并 setHead(N2)",
             summary: "N2 被唤醒后在 doAcquireSharedInterruptibly 中继续执行，tryAcquireShared 返回 r=1；随后 setHeadAndPropagate(N2, 1)",
             focus: "方法焦点：doAcquireSharedInterruptibly + setHeadAndPropagate",
             state: "1",
@@ -1371,7 +1371,7 @@
             ]
         },
         {
-            title: "13) 并发窗口 B：T1 尾部检查发现 head 已易主",
+            title: "并发窗口 B：T1 尾部检查发现 head 已易主",
             summary: "T1 在 doReleaseShared 尾部执行 if (h == head) 时，观察到 h=H 而当前 head=N2，于是继续 for 循环",
             focus: "方法焦点：doReleaseShared 的退出条件",
             state: "1",
@@ -1407,7 +1407,7 @@
             ]
         },
         {
-            title: "14) 并发窗口 C：T1/T2 同时传播，竞争 CAS(N2.ws)",
+            title: "并发窗口 C：T1/T2 同时传播，竞争 CAS(N2.ws)",
             summary: "T1 与 T2 并发执行 doReleaseShared，均可能尝试把 N2.waitStatus 从 SIGNAL 改到 0 并唤醒 N3",
             focus: "方法焦点：doReleaseShared 并发 CAS 竞争",
             state: "1",
@@ -1444,7 +1444,7 @@
             ]
         },
         {
-            title: "15) 并发结果：仅一个线程真正唤醒 N3",
+            title: "并发结果：仅一个线程真正唤醒 N3",
             summary: "竞争结果收敛后，N3 被唤醒进入 READY；另一个线程因 CAS 失败或状态变化进入下一轮检查",
             focus: "方法焦点：unparkSuccessor + for 循环收敛",
             state: "1",
@@ -1482,7 +1482,7 @@
             ]
         },
         {
-            title: "16) doReleaseShared 退出条件：head 未易主才 break",
+            title: "doReleaseShared 退出条件：head 未易主才 break",
             summary: "T1/T2 各自在 for 尾部执行 if (h == head)；只有观察到本轮快照 head 未被易主时才退出",
             focus: "方法焦点：doReleaseShared 的 break 条件",
             state: "1",
@@ -1518,7 +1518,7 @@
             ]
         },
         {
-            title: "17) N3 被唤醒后获取成功：r=0 并成为 head",
+            title: "N3 被唤醒后获取成功：r=0 并成为 head",
             summary: "N3 被唤醒后在 doAcquireSharedInterruptibly 中继续执行，tryAcquireShared 返回 r=0；setHeadAndPropagate 后队列收敛为单 head",
             focus: "方法焦点：doAcquireSharedInterruptibly 成功收尾",
             state: "0",
@@ -1558,7 +1558,7 @@
             ]
         },
         {
-            title: "18) T2 release(1)：无等待者，仅 permits++",
+            title: "T2 release(1)：无等待者，仅 permits++",
             summary: "T2 归还 1 个许可，tryReleaseShared 仍是 CAS + true；由于 head==tail，无可唤醒后继",
             focus: "方法焦点：tryReleaseShared（永远 true）",
             state: "1",
@@ -1596,7 +1596,7 @@
             ]
         },
         {
-            title: "19) T3 release(1)：permits 回到 2",
+            title: "T3 release(1)：permits 回到 2",
             summary: "T3 release 后 state=2，完成本轮 acquire/release 闭环；共享队列保持单 head 空转态",
             focus: "方法焦点：releaseShared 收尾分支",
             state: "2",
@@ -1634,7 +1634,7 @@
             ]
         },
         {
-            title: "20) 专项场景初始化：r=0 临界窗口（独立分支）",
+            title: "专项场景初始化：r=0 临界窗口（独立分支）",
             summary: "独立小场景：T3 首次 release 已唤醒 N1(T1)，T1 已经 tryAcquireShared 成功并得到 r=0，但尚未来得及 setHeadAndPropagate",
             focus: "方法焦点：setHeadAndPropagate 之前的并发空窗",
             state: "0",
@@ -1672,7 +1672,7 @@
             ]
         },
         {
-            title: "21) 独立分支：T4 release(1) 命中 ws==0 -> PROPAGATE",
+            title: "独立分支：T4 release(1) 命中 ws==0 -> PROPAGATE",
             summary: "T4 调用 releaseShared(1) 后，doReleaseShared 读到 old head(H).ws==0，执行 CAS(H.ws, 0, -3)",
             focus: "方法焦点：doReleaseShared(ws==0 -> PROPAGATE)",
             state: "1",
@@ -1712,7 +1712,7 @@
             ]
         },
         {
-            title: "22) 独立分支：N1 setHeadAndPropagate(0) 仍触发传播",
+            title: "独立分支：N1 setHeadAndPropagate(0) 仍触发传播",
             summary: "N1/T1 恢复执行 setHeadAndPropagate(N1, 0)；虽然 propagate=0，但 oldHead(H).waitStatus<0，条件成立并调用 doReleaseShared",
             focus: "方法焦点：setHeadAndPropagate 的 h.waitStatus<0 条件",
             state: "1",
@@ -1750,7 +1750,7 @@
             ]
         },
         {
-            title: "23) 独立分支收尾：N2 被唤醒后成功获取",
+            title: "独立分支收尾：N2 被唤醒后成功获取",
             summary: "N2/T2 被传播唤醒后尝试获取，CAS(state, 1, 0) 成功并成为新 head；证明 r=0 场景未断链",
             focus: "方法焦点：传播后继节点最终可达",
             state: "0",
@@ -1786,7 +1786,7 @@
             ]
         },
         {
-            title: "24) 语义分支：T4 未 acquire 也可以 release()",
+            title: "语义分支：T4 未 acquire 也可以 release()",
             summary: "Semaphore 不维护 owner；T4 即便未获取过 permit，也可合法 release，使 state 继续增加",
             focus: "方法焦点：tryReleaseShared 无 owner 校验",
             state: "1",
@@ -2192,7 +2192,7 @@
             const classes = ["step-chip"];
             if (index < current) classes.push("done");
             if (index === current) classes.push("active");
-            const label = rawStep.title.replace(/^\d+\)\s*/, "");
+            const label = rawStep.title;
             chip.className = classes.join(" ");
             chip.setAttribute("aria-label", `跳转到第 ${index + 1} 步：${step.group} / ${step.phase}，${label}`);
             if (index === current) {
@@ -2235,7 +2235,7 @@
         renderThreads(step);
         renderQueue(step);
 
-        el.stepTitle.textContent = step.title.replace(/^\d+\)\s*/, "");
+        el.stepTitle.textContent = step.title;
         el.stepSummary.textContent = step.summary;
         el.focusBox.textContent = step.focus;
 
